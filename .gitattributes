@@ -1,0 +1,31 @@
+# 自动处理换行符 (Text files)
+* text=auto
+
+# 明确指定文本文件
+*.py text
+*.js text
+*.vue text
+*.json text
+*.md text
+*.html text
+*.css text
+*.scss text
+
+# 明确指定二进制文件 (Binary files - 不会被 Git 尝试修改换行符)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.mp4 binary
+
+# Windows 批处理文件保留 CRLF
+*.bat text eol=crlf
+
+# Shell 脚本保留 LF
+*.sh text eol=lf
