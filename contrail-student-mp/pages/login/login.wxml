@@ -1,0 +1,32 @@
+<view class="container" style="padding-top: {{statusBarHeight + navBarHeight}}px;">
+  <!-- Custom Navigation Bar (Transparent/Fixed) -->
+  <view class="custom-nav" style="height: {{navBarHeight}}px; top: {{statusBarHeight}}px;">
+    <!-- Optional: Back button or Title here if needed -->
+  </view>
+
+  <view class="content-wrapper">
+    <view class="header">
+        <image class="logo" src="/assets/logo.png" mode="aspectFit" wx:if="{{false}}"></image>
+        <view class="title">航迹云</view>
+        <view class="subtitle">Contrail Cloud</view>
+    </view>
+
+    <view class="form">
+        <view class="input-group">
+        <text class="label">账号</text>
+        <input class="input" type="text" placeholder="请输入账号" placeholder-class="placeholder" bindinput="onInputUsername" value="{{username}}" />
+        </view>
+        
+        <view class="input-group">
+        <text class="label">密码</text>
+        <input class="input" type="password" placeholder="请输入密码" placeholder-class="placeholder" bindinput="onInputPassword" value="{{password}}" />
+        </view>
+
+        <button class="login-btn" bindtap="onLogin">登录</button>
+    </view>
+  </view>
+  
+  <view class="footer">
+    <text class="copyright">© 2026 航迹云 Contrail Cloud</text>
+  </view>
+</view>
