@@ -1,0 +1,26 @@
+page {
+  background-color: #f7f8fa;
+}
+
+.container {
+  padding: 40rpx;
+}
+
+.comment-full {
+  background-color: #ffffff;
+  padding: 40rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-sizing: border-box; /* Ensure padding doesn't overflow width */
+  width: 100%;
+}
+
+.comment-text {
+  font-size: 32rpx;
+  color: #333;
+  line-height: 1.8;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  display: block; /* Ensure block layout for width */
+  width: 100%;
+}

@@ -1,0 +1,128 @@
+/* Pages background */
+page {
+  background-color: #f5f7fa;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 40rpx;
+  box-sizing: border-box;
+}
+
+.custom-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+}
+
+.content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-bottom: 60rpx; /* Slight offset to visual center */
+}
+
+/* Header Section */
+.header {
+  margin-bottom: 80rpx;
+  text-align: center;
+}
+
+.logo {
+  width: 160rpx;
+  height: 160rpx;
+  margin-bottom: 20rpx;
+  border-radius: 20rpx;
+}
+
+.title {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #0056b3; /* Darker Blue */
+  margin-bottom: 10rpx;
+}
+
+.subtitle {
+  font-size: 28rpx;
+  color: #7f8c8d;
+  letter-spacing: 2rpx;
+}
+
+/* Form Section */
+.form {
+  width: 100%;
+  background-color: #ffffff;
+  padding: 40rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-sizing: border-box; /* Ensure padding doesn't affect width */
+}
+
+.input-group {
+  margin-bottom: 40rpx;
+}
+
+.label {
+  display: block;
+  font-size: 28rpx;
+  color: #34495e;
+  margin-bottom: 16rpx;
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  height: 88rpx;
+  background-color: #f0f4f8; /* Very light blue/gray */
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 30rpx;
+  color: #2c3e50;
+  box-sizing: border-box;
+}
+
+.placeholder {
+  color: #bdc3c7;
+}
+
+/* Login Button */
+.login-btn {
+  background: linear-gradient(135deg, #2b86ff, #0056b3); /* Slightly brighter start */
+  color: #ffffff;
+  font-size: 34rpx; /* Slightly larger text */
+  font-weight: 600; /* Semi-bold */
+  height: 100rpx; /* Slightly taller */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50rpx; /* Fully rounded */
+  margin-top: 40rpx; /* More breathing room */
+  box-shadow: 0 12rpx 24rpx rgba(0, 86, 179, 0.25); /* softer, deeper shadow */
+  letter-spacing: 4rpx; /* Add spacing for elegance */
+  transition: all 0.3s ease; /* Smooth transition */
+}
+
+.login-btn:active {
+  opacity: 0.95;
+  transform: scale(0.96);
+  box-shadow: 0 4rpx 12rpx rgba(0, 86, 179, 0.2); /* Compressed shadow */
+}
+
+/* Footer Section */
+.footer {
+  margin-top: auto;
+  padding-bottom: 40rpx;
+}
+
+.copyright {
+  font-size: 24rpx;
+  color: #95a5a6;
+}

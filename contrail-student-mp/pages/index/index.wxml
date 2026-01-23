@@ -1,0 +1,44 @@
+<!--index.wxml-->
+<scroll-view class="scrollarea" scroll-y type="list" style="height: {{scrollViewHeight}}px; padding-top: {{paddingTop}}px;">
+<view class="container" style="padding-bottom: {{paddingBottom}}px;">
+  <!-- Section 1: Score -->
+  <view class="score-section">
+    <view class="score-circle">
+      <text class="score-num">{{score}}</text>
+      <text class="score-label">分</text>
+    </view>
+  </view>
+
+  <!-- Section 2: Status Grid -->
+  <view class="status-section">
+    <view class="status-grid">
+      <block wx:for="{{statusList}}" wx:key="name">
+        <view class="status-item">
+          <view class="status-icon {{item.status}}">
+            <block wx:if="{{item.status === 'pending'}}">
+              <text class="dots">...</text>
+            </block>
+            <block wx:elif="{{item.status === 'qualified'}}">
+              <icon type="success_no_circle" size="30" color="#4caf50"></icon>
+            </block>
+            <block wx:elif="{{item.status === 'unqualified'}}">
+              <icon type="clear" size="30" color="#f44336"></icon>
+            </block>
+          </view>
+          <text class="status-name">{{item.name}}</text>
+          <text class="status-label">{{item.label}}</text>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <!-- Section 3: Comments -->
+  <view class="comment-section" bindtap="onCommentTap">
+    <view class="section-title">评语</view>
+    <view class="comment-content">
+      <text max-lines="3" text-overflow="ellipsis">{{comment}}</text>
+    </view>
+    <view class="comment-hint">点击查看全部</view>
+  </view>
+</view>
+</scroll-view>

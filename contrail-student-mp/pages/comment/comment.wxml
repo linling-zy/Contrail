@@ -1,0 +1,9 @@
+<navigation-bar title="详细评语" back="{{true}}" color="black" background="#FFF"></navigation-bar>
+<block wx:if="{{!isLoading}}">
+    <!-- Use a simple view with padding for the content -->
+    <view class="container">
+        <view class="comment-full">
+            <text class="comment-text" user-select="{{true}}">{{comment}}</text>
+        </view>
+    </view>
+</block>

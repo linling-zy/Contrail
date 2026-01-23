@@ -1,0 +1,58 @@
+<!-- Custom Navigation Bar -->
+<view class="custom-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="nav-title" style="line-height: {{navBarHeight}}px;">我的</view>
+</view>
+
+<view class="page-container" style="padding-top: {{paddingTop}}px;">
+  <view class="info-card">
+    
+    <!-- Name -->
+    <view class="info-cell">
+      <text class="label">姓名</text>
+      <text class="value">{{userInfo.name}}</text>
+    </view>
+    
+    <view class="divider"></view>
+
+    <view class="divider"></view>
+
+    <!-- College -->
+    <view class="info-cell">
+      <text class="label">学院</text>
+      <text class="value">{{userInfo.college}}</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- Grade -->
+    <view class="info-cell">
+      <text class="label">年级</text>
+      <text class="value">{{userInfo.grade}}</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- Major -->
+    <view class="info-cell">
+      <text class="label">专业</text>
+      <text class="value">{{userInfo.major}}</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- Class -->
+    <view class="info-cell">
+      <text class="label">班级</text>
+      <text class="value">{{userInfo.class}}</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- Student ID -->
+    <view class="info-cell">
+      <text class="label">学号</text>
+      <text class="value">{{userInfo.studentId}}</text>
+    </view>
+
+  </view>
+</view>

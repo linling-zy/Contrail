@@ -1,0 +1,162 @@
+/* Page Background */
+page {
+  background-color: #f5f7fa;
+}
+
+/* Custom Navigation Bar */
+.custom-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: #ffffff;
+  z-index: 100;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
+}
+
+.nav-title {
+  text-align: center;
+  font-size: 34rpx; /* 17px * 2 */
+  font-weight: 500;
+  color: #000000;
+}
+
+/* Scroll View */
+.content-scroll {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Certificate List */
+.cert-list {
+  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+/* Card Item */
+.cert-card {
+  display: flex;
+  align-items: center;
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  transition: transform 0.1s ease;
+}
+
+.cert-card:active {
+  transform: scale(0.98);
+}
+
+/* Left: Thumbnail */
+.card-thumb {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  background-color: #f0f2f5;
+  margin-right: 24rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+}
+
+.thumb-icon {
+  width: 64rpx;
+  height: 64rpx;
+  opacity: 0.6;
+}
+
+/* Center: Info */
+.card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.cert-title {
+  font-size: 32rpx; /* 16px */
+  font-weight: 600;
+  color: #333333;
+  margin-bottom: 8rpx;
+}
+
+/* Right: Badge Status */
+.card-status {
+  padding: 8rpx 20rpx;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+/* Status Colors */
+.status-passed {
+  background-color: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.status-auditing {
+  background-color: rgba(33, 150, 243, 0.1);
+  color: #2196f3;
+}
+
+.status-rejected {
+  background-color: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 200rpx;
+}
+
+.empty-img {
+  width: 320rpx;
+  height: auto;
+  margin-bottom: 32rpx;
+  opacity: 0.8;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+/* Floating Action Button (FAB) */
+.fab-btn {
+  position: fixed;
+  right: 48rpx;
+  bottom: 80rpx; /* 40px */
+  width: 112rpx; /* 56px */
+  height: 112rpx;
+  background-color: #0056b3; /* Primary Blue from app.json selectedColor */
+  border-radius: 50%;
+  box-shadow: 0 8rpx 24rpx rgba(0, 86, 179, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+}
+
+.fab-icon {
+  font-size: 60rpx;
+  color: #ffffff;
+  font-weight: 300;
+  margin-top: -6rpx; /* Slight visual adjustment */
+}
+
+/* Spacer for bottom list content so it isn't hidden by FAB */
+.list-spacer {
+  height: 160rpx;
+}
