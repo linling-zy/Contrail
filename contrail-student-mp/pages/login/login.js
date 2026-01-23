@@ -9,12 +9,12 @@ Page({
   },
 
   onLoad() {
-    const systemInfo = wx.getSystemInfoSync();
+    const windowInfo = wx.getWindowInfo();
     const menuButtonInfo = wx.getMenuButtonBoundingClientRect();
 
     this.setData({
-      statusBarHeight: systemInfo.statusBarHeight,
-      navBarHeight: (menuButtonInfo.top - systemInfo.statusBarHeight) * 2 + menuButtonInfo.height,
+      statusBarHeight: windowInfo.statusBarHeight,
+      navBarHeight: (menuButtonInfo.top - windowInfo.statusBarHeight) * 2 + menuButtonInfo.height,
       menuButtonHeight: menuButtonInfo.height,
       menuButtonTop: menuButtonInfo.top
     });

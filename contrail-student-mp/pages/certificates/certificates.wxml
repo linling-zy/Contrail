@@ -1,3 +1,46 @@
-<view class="container">
-  <text>Certificates Page</text>
+<!-- Custom Navigation Bar -->
+<view class="custom-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="nav-title" style="line-height: {{navBarHeight}}px;">我的荣誉证书</view>
+</view>
+
+<!-- Main Content Area -->
+<scroll-view class="content-scroll" scroll-y style="padding-top: {{paddingTop}}px; height: {{scrollViewHeight}}px;">
+  <view class="cert-list">
+    <!-- List Items -->
+    <block wx:if="{{certificates.length > 0}}">
+      <view class="cert-card" wx:for="{{certificates}}" wx:key="id" bindtap="onItemClick" data-item="{{item}}">
+        <!-- Left: Thumbnail/Icon -->
+        <view class="card-thumb">
+          <image wx:if="{{item.thumb}}" src="{{item.thumb}}" mode="aspectFill" class="thumb-img"></image>
+          <image wx:else src="/images/cert_default.png" mode="aspectFit" class="thumb-icon"></image>
+        </view>
+        
+        <!-- Center: Info -->
+        <view class="card-info">
+          <text class="cert-title">{{item.title}}</text>
+        </view>
+
+        <!-- Right: Status Badge -->
+        <view class="card-status status-{{item.status}}">
+          <text>{{item.statusLabel}}</text>
+        </view>
+      </view>
+    </block>
+
+    <!-- Empty State -->
+    <block wx:else>
+      <view class="empty-state">
+        <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
+        <text class="empty-text">暂无证书</text>
+      </view>
+    </block>
+    
+    <!-- Bottom Spacer for FAB -->
+    <view class="list-spacer"></view>
+  </view>
+</scroll-view>
+
+<!-- Floating Action Button (FAB) -->
+<view class="fab-btn" bindtap="onUpload">
+  <text class="fab-icon">+</text>
 </view>

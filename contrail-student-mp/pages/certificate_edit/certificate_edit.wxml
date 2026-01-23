@@ -1,0 +1,91 @@
+<!-- Custom Navigation Bar -->
+<view class="custom-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="nav-content">
+    <view class="back-btn" bindtap="onBack">
+      <text class="back-icon">❮</text>
+    </view>
+    <view class="nav-title" style="line-height: {{navBarHeight}}px;">上传证书</view>
+  </view>
+</view>
+
+<!-- Main Page Content -->
+<view class="container" style="padding-top: {{headerHeight}}px;">
+  
+  <!-- Alert Placeholder (Always exists to maintain fixed spacing) -->
+  <view class="alert-placeholder">
+    <!-- Alert Banner (Absolute positioned, overlays placeholder) -->
+    <view class="alert-box" wx:if="{{isRejected}}">
+      <icon type="warn" size="18" color="#f44336"></icon>
+      <text class="alert-text">驳回原因：{{rejectReason}}</text>
+    </view>
+  </view>
+
+  <!-- White Card Container -->
+  <view class="content-card">
+    
+    <!-- 1. Certificate Name Selection (Row) -->
+    <view class="form-item-row" bindtap="togglePicker">
+      <view class="row-label">证书名称</view>
+      <view class="row-value {{selectedCert ? '' : 'placeholder'}}" style="opacity: {{isRejected ? 0.5 : 1}}">
+        {{selectedCert || '请选择'}}
+      </view>
+    </view>
+
+    <!-- Divider -->
+    <view class="divider"></view>
+
+    <!-- 2. Upload Area -->
+    <view class="upload-area-wrapper">
+      <view class="area-label">上传凭证</view>
+      
+      <!-- Upload Box -->
+      <view class="upload-box" bindtap="onUpload" wx:if="{{!imagePath}}">
+        <view class="upload-dashed">
+          <image src="/images/camera_icon.png" class="camera-icon" mode="aspectFit"></image>
+          <text class="upload-hint">点击上传证书清晰照片</text>
+        </view>
+      </view>
+
+      <!-- Preview Box -->
+      <view class="preview-box" wx:else>
+        <image src="{{imagePath}}" class="preview-img" mode="aspectFill" bindtap="previewImage"></image>
+        <view class="remove-btn" catchtap="onRemoveImg">
+          <icon type="clear" size="20" color="#f44336"></icon>
+        </view>
+      </view>
+
+      <text class="warning-text">请确保证书编号和公章清晰可见</text>
+    </view>
+
+  </view>
+
+</view>
+
+  <!-- Bottom Submit Button -->
+  <view class="footer-btn-area">
+    <button class="submit-btn" bindtap="onSubmit">提交审核</button>
+  </view>
+
+  <!-- Bottom Sheet Picker -->
+  <view class="bottom-sheet-mask {{showPicker ? 'show' : ''}}" bindtap="togglePicker">
+    <view class="bottom-sheet" catchtap="stopProp">
+      <view class="sheet-header">
+        <text class="sheet-title">选择证书</text>
+        <view class="close-icon" bindtap="togglePicker">×</view>
+      </view>
+      
+      <view class="search-bar">
+        <input class="search-input" placeholder="搜索证书名称" bindinput="onSearch" value="{{searchText}}" />
+      </view>
+
+      <scroll-view scroll-y class="sheet-list">
+        <block wx:for="{{filteredList}}" wx:key="*this">
+          <view class="sheet-item" hover-class="item-hover" bindtap="onSelectCert" data-name="{{item}}">
+            <text>{{item}}</text>
+            <icon wx:if="{{selectedCert === item}}" type="success_no_circle" size="16" color="#0056b3"></icon>
+          </view>
+        </block>
+        <view wx:if="{{filteredList.length === 0}}" class="no-result">无搜索结果</view>
+      </scroll-view>
+    </view>
+  </view>
