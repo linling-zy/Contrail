@@ -1,12 +1,13 @@
 """
 超级管理员系统管理 API
 提供管理员账号的创建、查询、修改等功能
+提供证书类型管理和部门证书规则绑定功能
 仅限超级管理员访问
 """
 from flask import request, jsonify
 from app.api.admin_auth import admin_bp
 from app.extensions import db
-from app.models import AdminUser, Department
+from app.models import AdminUser, Department, CertificateType, Certificate
 from app.utils.rsa_utils import get_rsa_utils
 from app.utils.admin_permission import super_admin_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -304,4 +305,171 @@ def delete_admin(admin_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'删除管理员失败: {str(e)}'}), 500
+
+
+# ==================== 证书类型管理 ====================
+
+@admin_bp.route('/certificate-types', methods=['POST'])
+@super_admin_required
+def create_certificate_type():
+    """
+    创建证书类型（仅限超级管理员）
+    请求体: {
+        "name": "英语四级",
+        "description": "大学英语四级考试证书",
+        "is_required": true
+    }
+    返回: { "certificate_type": {...}, "message": "创建成功" }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': '请求体不能为空'}), 400
+    
+    name = data.get('name', '').strip()
+    description = data.get('description', '').strip() or None
+    is_required = data.get('is_required', True)
+    
+    # 参数验证
+    if not name:
+        return jsonify({'error': '证书名称不能为空'}), 400
+    
+    # 检查名称是否已存在
+    if CertificateType.query.filter_by(name=name).first():
+        return jsonify({'error': '该证书类型名称已存在'}), 400
+    
+    # 创建证书类型
+    cert_type = CertificateType(
+        name=name,
+        description=description,
+        is_required=bool(is_required)
+    )
+    
+    try:
+        db.session.add(cert_type)
+        db.session.commit()
+        return jsonify({
+            'message': '证书类型创建成功',
+            'certificate_type': cert_type.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'创建证书类型失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/certificate-types', methods=['GET'])
+@jwt_required()
+def list_certificate_types():
+    """
+    获取所有证书类型列表（所有管理员都可以查看）
+    返回: { "certificate_types": [...] }
+    """
+    certificate_types = CertificateType.query.order_by(CertificateType.id.asc()).all()
+    
+    return jsonify({
+        'certificate_types': [cert_type.to_dict() for cert_type in certificate_types]
+    }), 200
+
+
+@admin_bp.route('/certificate-types/<int:cert_type_id>', methods=['DELETE'])
+@super_admin_required
+def delete_certificate_type(cert_type_id):
+    """
+    删除证书类型（仅限超级管理员）
+    如果已有部门绑定或已有学生上传该证书，将返回错误
+    返回: { "message": "删除成功" }
+    """
+    cert_type = CertificateType.query.get(cert_type_id)
+    
+    if not cert_type:
+        return jsonify({'error': '证书类型不存在'}), 404
+    
+    # 检查是否有部门绑定了该证书类型
+    departments_with_cert = cert_type.departments.all()
+    if departments_with_cert:
+        dept_names = [f"{dept.college}/{dept.grade}/{dept.major}/{dept.class_name}" for dept in departments_with_cert[:3]]
+        dept_count = len(departments_with_cert)
+        return jsonify({
+            'error': f'无法删除：该证书类型已被 {dept_count} 个部门绑定',
+            'departments': dept_names[:3]  # 只返回前3个作为示例
+        }), 400
+    
+    # 检查是否有学生上传了该名称的证书
+    certificates_count = Certificate.query.filter_by(name=cert_type.name).count()
+    if certificates_count > 0:
+        return jsonify({
+            'error': f'无法删除：已有 {certificates_count} 个学生上传了该证书'
+        }), 400
+    
+    try:
+        db.session.delete(cert_type)
+        db.session.commit()
+        return jsonify({'message': '证书类型删除成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'删除证书类型失败: {str(e)}'}), 500
+
+
+# ==================== 部门证书规则绑定 ====================
+
+@admin_bp.route('/department/<int:dept_id>/bind-certs', methods=['POST'])
+@super_admin_required
+def bind_certificate_types_to_department(dept_id):
+    """
+    为部门绑定证书类型（仅限超级管理员）
+    请求体: {
+        "certificate_type_ids": [1, 2, 5]
+    }
+    返回: { "department": {...}, "certificate_types": [...], "message": "绑定成功" }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': '请求体不能为空'}), 400
+    
+    certificate_type_ids = data.get('certificate_type_ids', [])
+    
+    # 参数验证
+    if not isinstance(certificate_type_ids, list):
+        return jsonify({'error': 'certificate_type_ids 必须是数组'}), 400
+    
+    # 获取部门
+    department = Department.query.get(dept_id)
+    if not department:
+        return jsonify({'error': '部门不存在'}), 404
+    
+    # 验证证书类型ID是否存在
+    if certificate_type_ids:
+        valid_cert_types = CertificateType.query.filter(
+            CertificateType.id.in_(certificate_type_ids)
+        ).all()
+        valid_ids = [ct.id for ct in valid_cert_types]
+        invalid_ids = set(certificate_type_ids) - set(valid_ids)
+        
+        if invalid_ids:
+            return jsonify({
+                'error': f'以下证书类型ID不存在: {list(invalid_ids)}'
+            }), 400
+        
+        # 更新部门与证书类型的关联（覆盖更新）
+        department.certificate_types = valid_cert_types
+    else:
+        # 如果传入空数组，清空所有关联
+        department.certificate_types = []
+    
+    try:
+        db.session.commit()
+        
+        # 重新查询以获取最新数据
+        db.session.refresh(department)
+        bound_cert_types = department.certificate_types.all()
+        
+        return jsonify({
+            'message': '证书类型绑定成功',
+            'department': department.to_dict(),
+            'certificate_types': [ct.to_dict() for ct in bound_cert_types]
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'绑定证书类型失败: {str(e)}'}), 500
 

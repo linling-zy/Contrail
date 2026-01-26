@@ -1,6 +1,6 @@
 """
 管理员学生管理 API
-提供学生列表查询、状态更新等功能
+提供学生列表查询、状态更新、批量注册等功能
 需要管理员权限，普通管理员只能管理自己部门的学生
 """
 from flask import request, jsonify
@@ -8,6 +8,7 @@ from app.api.admin_auth import admin_bp
 from app.extensions import db
 from app.models import User, AdminUser, Department, ScoreLog, Comment
 from app.utils.permission import get_admin_accessible_query
+from app.utils.rsa_utils import get_rsa_utils
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 
@@ -349,4 +350,244 @@ def add_comment(student_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'添加评语失败: {str(e)}'}), 500
+
+
+def check_admin_access_to_department(admin_id, department_id):
+    """
+    检查管理员是否有权限在指定部门注册用户
+    
+    Args:
+        admin_id: 管理员ID
+        department_id: 部门ID
+    
+    Returns:
+        tuple: (has_access: bool, department: Department or None)
+    """
+    admin = AdminUser.query.get(admin_id)
+    if not admin:
+        return False, None
+    
+    department = Department.query.get(department_id)
+    if not department:
+        return False, None
+    
+    # 超级管理员可以在所有部门注册用户
+    if admin.role == AdminUser.ROLE_SUPER:
+        return True, department
+    
+    # 普通管理员只能在自己管理的部门注册用户
+    managed_departments = admin.managed_departments.all()
+    managed_dept_ids = [dept.id for dept in managed_departments]
+    
+    if department_id in managed_dept_ids:
+        return True, department
+    
+    return False, department
+
+
+@admin_bp.route('/students/batch-register', methods=['POST'])
+@jwt_required()
+def batch_register():
+    """
+    批量注册学生（管理员权限）
+    请求体: {
+        "users": [
+            {
+                "id_card_no": "身份证号",
+                "student_id": "学号(可选)",
+                "name": "张三",
+                "password": "RSA加密后的密码(base64)",
+                "department_id": 1
+            },
+            ...
+        ]
+    }
+    注意：password 必须是使用 RSA 公钥加密后的 base64 字符串，请先调用 GET /api/admin/auth/public-key 获取公钥
+    返回: {
+        "success_count": 2,
+        "failed_count": 1,
+        "success": [...],
+        "failed": [...]
+    }
+    """
+    admin_id = get_jwt_identity()
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': '请求体不能为空'}), 400
+    
+    users_data = data.get('users', [])
+    
+    if not isinstance(users_data, list):
+        return jsonify({'error': 'users 必须是数组'}), 400
+    
+    if not users_data:
+        return jsonify({'error': 'users 数组不能为空'}), 400
+    
+    if len(users_data) > 100:
+        return jsonify({'error': '单次最多只能注册100个用户'}), 400
+    
+    rsa_utils = get_rsa_utils()
+    success_list = []
+    failed_list = []
+    
+    for idx, user_data in enumerate(users_data):
+        try:
+            # 提取用户数据
+            id_card_no = user_data.get('id_card_no')
+            student_id = user_data.get('student_id')
+            name = user_data.get('name')
+            password = user_data.get('password')
+            department_id = user_data.get('department_id')
+            
+            # 参数验证
+            if not id_card_no or not name or not password:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no or '',
+                    'error': '身份证号、姓名和密码不能为空'
+                })
+                continue
+            
+            if not department_id:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': 'department_id 不能为空'
+                })
+                continue
+            
+            # 检查管理员是否有权限在该部门注册用户
+            has_access, department = check_admin_access_to_department(admin_id, department_id)
+            if not department:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': f'department_id {department_id} 不存在'
+                })
+                continue
+            
+            if not has_access:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': f'无权在部门 {department_id} 注册用户'
+                })
+                continue
+            
+            # 解密密码
+            try:
+                decrypted_password = rsa_utils.decrypt_password(password)
+            except ValueError as e:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': f'密码解密失败，请确保密码已使用RSA公钥加密: {str(e)}'
+                })
+                continue
+            except Exception as e:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': f'密码处理失败: {str(e)}'
+                })
+                continue
+            
+            # 身份证号格式校验
+            id_card_no = str(id_card_no).strip()
+            if len(id_card_no) != 18:
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': '身份证号必须为18位'
+                })
+                continue
+            
+            if (not id_card_no[:17].isdigit()) or (not (id_card_no[17].isdigit() or id_card_no[17] in ('X', 'x'))):
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': '身份证号格式不正确'
+                })
+                continue
+            
+            # 检查身份证号是否已存在
+            if User.query.filter_by(id_card_no=id_card_no).first():
+                failed_list.append({
+                    'index': idx,
+                    'id_card_no': id_card_no,
+                    'error': '该身份证号已注册'
+                })
+                continue
+            
+            # 学号可选：如果提供，校验格式
+            if student_id is not None and str(student_id).strip() != '':
+                student_id = str(student_id).strip()
+                if not student_id.isdigit():
+                    failed_list.append({
+                        'index': idx,
+                        'id_card_no': id_card_no,
+                        'error': '学号必须为纯数字'
+                    })
+                    continue
+                if len(student_id) != 12:
+                    failed_list.append({
+                        'index': idx,
+                        'id_card_no': id_card_no,
+                        'error': '学号必须为12位数字'
+                    })
+                    continue
+                # 学号唯一性检查
+                if User.query.filter_by(student_id=student_id).first():
+                    failed_list.append({
+                        'index': idx,
+                        'id_card_no': id_card_no,
+                        'error': '该学号已注册'
+                    })
+                    continue
+            else:
+                student_id = None
+            
+            # 创建新用户
+            user = User(
+                id_card_no=id_card_no,
+                student_id=student_id,
+                name=name,
+                department_id=department.id
+            )
+            user.set_password(decrypted_password)
+            
+            db.session.add(user)
+            db.session.flush()  # 刷新以获取用户ID，但不提交事务
+            
+            success_list.append({
+                'index': idx,
+                'user': user.to_dict(include_score=False)
+            })
+            
+        except Exception as e:
+            failed_list.append({
+                'index': idx,
+                'id_card_no': user_data.get('id_card_no', ''),
+                'error': f'处理失败: {str(e)}'
+            })
+    
+    # 提交所有成功的用户
+    try:
+        db.session.commit()
+        return jsonify({
+            'success_count': len(success_list),
+            'failed_count': len(failed_list),
+            'success': success_list,
+            'failed': failed_list
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': f'批量注册提交失败: {str(e)}',
+            'success_count': 0,
+            'failed_count': len(failed_list) + len(success_list),
+            'success': [],
+            'failed': failed_list + [{'index': item['index'], 'id_card_no': item['user']['id_card_no'], 'error': '数据库提交失败'} for item in success_list]
+        }), 500
 
