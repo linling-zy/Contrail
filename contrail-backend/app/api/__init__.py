@@ -8,5 +8,5 @@ from flask import Blueprint
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 # 导入各个路由模块（在蓝图注册后导入，避免循环导入）
-from app.api import auth, student, certificate, department
+from app.api import auth, student, certificate, department, admin_auth, admin_system, admin_student, admin_cert
 
