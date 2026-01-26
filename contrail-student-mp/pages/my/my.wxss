@@ -93,3 +93,17 @@ page {
   background-color: #F0F0F0;
   width: 100%;
 }
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 120rpx 32rpx;
+  min-height: 60vh;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999999;
+}

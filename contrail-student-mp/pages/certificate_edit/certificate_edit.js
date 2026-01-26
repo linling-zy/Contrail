@@ -1,3 +1,5 @@
+const { uploadFile, get } = require('../../utils/request')
+
 Page({
     data: {
         isRejected: false,
@@ -6,40 +8,33 @@ Page({
         imagePath: '',
         showPicker: false,
         searchText: '',
-        certList: [
-            '英语四级证书 (CET-4)',
-            '英语六级证书 (CET-6)',
-            '计算机二级证书 (NCRE-2)',
-            '计算机三级证书 (NCRE-3)',
-            '普通话一级乙等',
-            '普通话二级甲等',
-            '教师资格证',
-            '初级会计职称',
-            '中级会计职称',
-            '法律职业资格证书'
-        ],
+        certId: null, // 如果是重新上传被驳回的证书，记录原证书ID
+        certList: [], // 从后端API获取
         filteredList: [],
         navBarHeight: 0,
         statusBarHeight: 0,
-        headerHeight: 0
+        headerHeight: 0,
+        isSubmitting: false,
+        isLoadingCertTypes: false, // 证书类型列表加载状态
+        hasNoCertTypes: false, // 是否没有证书类型需要提交
     },
 
     onLoad(options) {
         this.initLayout()
+        this.loadCertificateTypes() // 加载证书类型列表
 
         if (options.status === 'rejected') {
             this.setData({
                 isRejected: true,
-                rejectReason: options.reason || '图片质量不符合要求'
+                rejectReason: decodeURIComponent(options.reason || '图片质量不符合要求'),
             })
-            // If editing existing item, you might preload data here
             if (options.certName) {
-                this.setData({ selectedCert: options.certName })
+                this.setData({ selectedCert: decodeURIComponent(options.certName) })
+            }
+            if (options.certId) {
+                this.setData({ certId: parseInt(options.certId, 10) })
             }
         }
-
-        // Initialize filtered list
-        this.setData({ filteredList: this.data.certList })
     },
 
     initLayout() {
@@ -58,6 +53,46 @@ Page({
         })
     },
 
+    /**
+     * 从后端API加载证书类型列表
+     * 接口: GET /api/certificate/types
+     * 返回: { certificate_types: [{ id, name, description, is_required, ... }] }
+     */
+    async loadCertificateTypes() {
+        this.setData({ isLoadingCertTypes: true })
+        try {
+            const res = await get('/certificate/types')
+            // 提取证书名称列表
+            const certTypes = res.certificate_types || []
+            const certNames = certTypes.map(item => item.name).filter(Boolean)
+            
+            if (certNames.length > 0) {
+                this.setData({
+                    certList: certNames,
+                    filteredList: certNames,
+                    hasNoCertTypes: false,
+                })
+            } else {
+                // 没有证书类型需要提交
+                this.setData({
+                    certList: [],
+                    filteredList: [],
+                    hasNoCertTypes: true,
+                })
+            }
+        } catch (err) {
+            console.error('加载证书类型列表失败:', err)
+            // API调用失败时也显示空状态
+            this.setData({
+                certList: [],
+                filteredList: [],
+                hasNoCertTypes: true,
+            })
+        } finally {
+            this.setData({ isLoadingCertTypes: false })
+        }
+    },
+
     onBack() {
         wx.navigateBack()
     },
@@ -66,6 +101,10 @@ Page({
     togglePicker() {
         if (this.data.isRejected) {
             return; // Disable picker in rejected mode
+        }
+        if (this.data.isLoadingCertTypes) {
+            wx.showToast({ title: '证书列表加载中，请稍候', icon: 'none' })
+            return
         }
         this.setData({
             showPicker: !this.data.showPicker,
@@ -123,8 +162,10 @@ Page({
     },
 
     // Submit Logic
-    onSubmit() {
-        const { selectedCert, imagePath } = this.data
+    async onSubmit() {
+        const { selectedCert, imagePath, isSubmitting } = this.data
+
+        if (isSubmitting) return
 
         if (!selectedCert) {
             wx.showToast({ title: '请选择证书名称', icon: 'none' })
@@ -136,10 +177,21 @@ Page({
             return
         }
 
-        wx.showLoading({ title: '提交中...' })
+        this.setData({ isSubmitting: true })
+        wx.showLoading({ title: '上传中...', mask: true })
 
-        // Simulate Network Request
-        setTimeout(() => {
+        try {
+            // 使用 uploadFile 上传证书
+            // 后端要求: file (文件), certName (证书名称)
+            await uploadFile({
+                url: '/certificate/upload',
+                filePath: imagePath,
+                name: 'file', // 后端期望的字段名
+                formData: {
+                    certName: selectedCert,
+                },
+            })
+
             wx.hideLoading()
             wx.showToast({
                 title: '提交成功',
@@ -147,10 +199,26 @@ Page({
                 duration: 2000,
                 success: () => {
                     setTimeout(() => {
+                        // 返回上一页并触发刷新（通过事件或直接刷新）
+                        const pages = getCurrentPages()
+                        const prevPage = pages[pages.length - 2]
+                        if (prevPage && typeof prevPage.loadCertificates === 'function') {
+                            prevPage.loadCertificates()
+                        }
                         wx.navigateBack()
                     }, 1500)
-                }
+                },
             })
-        }, 1500)
-    }
+        } catch (err) {
+            wx.hideLoading()
+            console.error('证书上传失败:', err)
+            wx.showToast({
+                title: err.message || '上传失败，请稍后重试',
+                icon: 'none',
+                duration: 3000,
+            })
+        } finally {
+            this.setData({ isSubmitting: false })
+        }
+    },
 })

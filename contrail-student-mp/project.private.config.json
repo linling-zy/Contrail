@@ -3,7 +3,8 @@
   "projectname": "Contrail",
   "setting": {
     "compileHotReLoad": true,
-    "skylineRenderEnable": false
+    "skylineRenderEnable": false,
+    "urlCheck": false
   },
   "libVersion": "3.13.2"
 }

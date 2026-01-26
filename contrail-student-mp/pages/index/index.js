@@ -5,6 +5,7 @@ Page({
         paddingBottom: 0,
         scrollViewHeight: 0,
         tabBarHeight: 0,
+        loading: false,
         score: 85,
         statusList: [
             { name: '初试', status: 'qualified', label: '合格' },
@@ -48,9 +49,71 @@ Page({
             tabBarHeight: totalTabBarHeight
         });
     },
+    onShow() {
+        // tab 页每次切回都刷新一下数据
+        this.fetchDashboard();
+    },
+    _statusLabel(status) {
+        if (status === 'qualified') return '合格';
+        if (status === 'unqualified') return '不合格';
+        return '待处理';
+    },
+    _buildStatusList(processStatus) {
+        const ps = processStatus || {};
+        const list = [
+            { key: 'preliminary', name: '初试' },
+            { key: 'medical', name: '体检' },
+            { key: 'political', name: '政审' },
+            { key: 'admission', name: '录取' },
+        ];
+        return list.map((it) => {
+            const status = ps[it.key] || 'pending';
+            return { name: it.name, status, label: this._statusLabel(status) };
+        });
+    },
+    async fetchDashboard() {
+        if (this.data.loading) return;
+        this.setData({ loading: true });
+
+        const { get } = require('../../utils/request');
+        try {
+            // 1) 首选 dashboard（后端新增接口）
+            const dashboard = await get('/student/dashboard');
+            const score = (dashboard && (dashboard.score ?? dashboard.total_score)) ?? this.data.score;
+            const comment = (dashboard && dashboard.comment) || '';
+            const statusList = this._buildStatusList(dashboard && dashboard.process_status);
+
+            this.setData({
+                score,
+                comment,
+                statusList,
+            });
+        } catch (e) {
+            // 2) 兜底：只拉积分，避免主页空白（比如后端未部署 dashboard）
+            try {
+                const scoreRes = await get('/student/score');
+                const score = (scoreRes && (scoreRes.total_score ?? scoreRes.totalScore)) ?? this.data.score;
+                if (score !== this.data.score) {
+                    this.setData({ score });
+                }
+            } catch (_) {}
+
+            wx.showToast({
+                title: e.message || '主页数据加载失败',
+                icon: 'none'
+            });
+        } finally {
+            this.setData({ loading: false });
+        }
+    },
     onCommentTap() {
+        if (!this.data.comment) {
+            wx.showToast({ title: '暂无评语', icon: 'none' });
+            return;
+        }
+        const q = encodeURIComponent(this.data.comment);
         wx.navigateTo({
-            url: '/pages/comment/comment',
+            url: `/pages/comment/comment?comment=${q}`,
         });
     }
 })

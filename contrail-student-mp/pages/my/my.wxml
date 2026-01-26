@@ -4,55 +4,63 @@
 </view>
 
 <view class="page-container" style="padding-top: {{paddingTop}}px;">
-  <view class="info-card">
-    
-    <!-- Name -->
-    <view class="info-cell">
-      <text class="label">姓名</text>
-      <text class="value">{{userInfo.name}}</text>
+  <!-- Loading State -->
+  <block wx:if="{{isLoading}}">
+    <view class="loading-state">
+      <text class="loading-text">加载中...</text>
     </view>
-    
-    <view class="divider"></view>
+  </block>
 
-    <view class="divider"></view>
+  <!-- User Info Card -->
+  <block wx:else>
+    <view class="info-card">
+      
+      <!-- Name -->
+      <view class="info-cell">
+        <text class="label">姓名</text>
+        <text class="value">{{userInfo.name || '未设置'}}</text>
+      </view>
+      
+      <view class="divider"></view>
 
-    <!-- College -->
-    <view class="info-cell">
-      <text class="label">学院</text>
-      <text class="value">{{userInfo.college}}</text>
+      <!-- College -->
+      <view class="info-cell">
+        <text class="label">学院</text>
+        <text class="value">{{userInfo.college || '未设置'}}</text>
+      </view>
+
+      <view class="divider"></view>
+
+      <!-- Grade -->
+      <view class="info-cell">
+        <text class="label">年级</text>
+        <text class="value">{{userInfo.grade || '未设置'}}</text>
+      </view>
+
+      <view class="divider"></view>
+
+      <!-- Major -->
+      <view class="info-cell">
+        <text class="label">专业</text>
+        <text class="value">{{userInfo.major || '未设置'}}</text>
+      </view>
+
+      <view class="divider"></view>
+
+      <!-- Class -->
+      <view class="info-cell">
+        <text class="label">班级</text>
+        <text class="value">{{userInfo.class || '未设置'}}</text>
+      </view>
+
+      <view class="divider"></view>
+
+      <!-- Student ID -->
+      <view class="info-cell">
+        <text class="label">学号</text>
+        <text class="value">{{userInfo.studentId || '未设置'}}</text>
+      </view>
+
     </view>
-
-    <view class="divider"></view>
-
-    <!-- Grade -->
-    <view class="info-cell">
-      <text class="label">年级</text>
-      <text class="value">{{userInfo.grade}}</text>
-    </view>
-
-    <view class="divider"></view>
-
-    <!-- Major -->
-    <view class="info-cell">
-      <text class="label">专业</text>
-      <text class="value">{{userInfo.major}}</text>
-    </view>
-
-    <view class="divider"></view>
-
-    <!-- Class -->
-    <view class="info-cell">
-      <text class="label">班级</text>
-      <text class="value">{{userInfo.class}}</text>
-    </view>
-
-    <view class="divider"></view>
-
-    <!-- Student ID -->
-    <view class="info-cell">
-      <text class="label">学号</text>
-      <text class="value">{{userInfo.studentId}}</text>
-    </view>
-
-  </view>
+  </block>
 </view>

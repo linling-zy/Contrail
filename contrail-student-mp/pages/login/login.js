@@ -1,6 +1,6 @@
 Page({
   data: {
-    username: '',
+    idCardNo: '',
     password: '',
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -20,9 +20,9 @@ Page({
     });
   },
 
-  onInputUsername(e) {
+  onInputIdCardNo(e) {
     this.setData({
-      username: e.detail.value
+      idCardNo: e.detail.value
     });
   },
 
@@ -32,46 +32,50 @@ Page({
     });
   },
 
-  onLogin() {
-    const { username, password } = this.data;
+  async onLogin() {
+    const { idCardNo, password } = this.data;
 
-    if (!username || !password) {
-      wx.showToast({
-        title: '请输入账号和密码',
-        icon: 'none'
-      });
+    if (!idCardNo || !password) {
+      wx.showToast({ title: '请输入身份证号和密码', icon: 'none' });
       return;
     }
 
-    wx.showLoading({
-      title: '登录中...',
-    });
+    const { get, post } = require('../../utils/request');
+    const { encryptWithPublicKey } = require('../../utils/rsa');
 
-    // Simulate API call
-    setTimeout(() => {
+    wx.showLoading({ title: '登录中...' });
+
+    try {
+      // 1) 获取 RSA 公钥（后端要求密码必须加密）
+      const pk = await get('/auth/public-key', null, { auth: false });
+      const publicKeyPem = pk && (pk.public_key || pk.publicKey);
+      if (!publicKeyPem) throw new Error('获取公钥失败');
+
+      // 2) RSA 加密密码（PKCS#1 v1.5），得到 base64 字符串
+      const encryptedPassword = encryptWithPublicKey(password, publicKeyPem);
+
+      // 3) 登录
+      const res = await post(
+        '/auth/login',
+        { id_card_no: String(idCardNo).trim(), password: encryptedPassword },
+        { auth: false }
+      );
+
+      const token = res && (res.access_token || (res.data && res.data.token));
+      const user = res && (res.user || (res.data && res.data.userInfo));
+      if (!token) throw new Error('登录失败：未返回token');
+
+      wx.setStorageSync('token', token);
+      if (user) wx.setStorageSync('user', user);
+
+      wx.showToast({ title: '登录成功', icon: 'success' });
+      setTimeout(() => {
+        wx.switchTab({ url: '/pages/index/index' });
+      }, 800);
+    } catch (e) {
+      wx.showToast({ title: e.message || '登录失败', icon: 'none' });
+    } finally {
       wx.hideLoading();
-
-      // Fake login logic: Accept any non-empty input for now, 
-      // or we could enforce specific credentials like 'admin/123456'.
-      // For this task, we'll accept 'student' as a valid user testing scenario.
-      if (username) {
-        wx.showToast({
-          title: '登录成功',
-          icon: 'success'
-        });
-
-        // Navigate to home page after short delay
-        setTimeout(() => {
-          wx.switchTab({
-            url: '/pages/index/index'
-          });
-        }, 1500);
-      } else {
-        wx.showToast({
-          title: '用户名或密码错误',
-          icon: 'none'
-        });
-      }
-    }, 1000);
+    }
   }
 });
