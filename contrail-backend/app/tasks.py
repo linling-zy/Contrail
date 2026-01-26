@@ -51,7 +51,8 @@ def weekly_bonus():
                 )
                 db.session.add(score_log)
                 bonus_count += 1
-                print(f"  ✓ 用户 {user.student_id} ({user.name}) 获得每周奖励 +1分")
+                user_key = getattr(user, 'id_card_no', None) or getattr(user, 'student_id', None) or str(user.id)
+                print(f"  ✓ 用户 {user_key} ({user.name}) 获得每周奖励 +1分")
     
     db.session.commit()
     print(f"[定时任务] 每周奖励任务完成，共奖励 {bonus_count} 位学生")
@@ -102,7 +103,8 @@ def monthly_bonus():
                 )
                 db.session.add(score_log)
                 bonus_count += 1
-                print(f"  ✓ 用户 {user.student_id} ({user.name}) 获得每月奖励 +2分")
+                user_key = getattr(user, 'id_card_no', None) or getattr(user, 'student_id', None) or str(user.id)
+                print(f"  ✓ 用户 {user_key} ({user.name}) 获得每月奖励 +2分")
     
     db.session.commit()
     print(f"[定时任务] 每月奖励任务完成，共奖励 {bonus_count} 位学生")

@@ -27,6 +27,22 @@ class Config:
     # 文件上传配置
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 最大上传文件大小 16MB
     UPLOAD_FOLDER = 'uploads'  # 证书图片上传目录
+
+    # MinIO/S3 配置（用于生成 Presigned URL；敏感信息务必通过环境变量配置）
+    # 约定：
+    # - 数据库存储的是 Object Key（相对路径/文件名），如 2024/01/user_123_uuid.jpg
+    # - 返回给前端时通过 Presigned URL 临时授权访问私有 Bucket
+    MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT') or 'http://127.0.0.1:9000'
+    MINIO_BUCKET = os.environ.get('MINIO_BUCKET') or 'student-certificates'
+    MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY')
+    MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY')
+    MINIO_REGION = os.environ.get('MINIO_REGION') or 'us-east-1'
+    MINIO_PRESIGN_EXPIRES = int(os.environ.get('MINIO_PRESIGN_EXPIRES') or '3600')  # 默认 1 小时
+    # 是否使用 HTTPS：
+    # - 若设置了 MINIO_SECURE，则使用该值
+    # - 若未设置，则由 MINIO_ENDPOINT 的 scheme 自动推断（http -> False / https -> True）
+    _MINIO_SECURE_RAW = os.environ.get('MINIO_SECURE')
+    MINIO_SECURE = None if _MINIO_SECURE_RAW is None else _MINIO_SECURE_RAW.lower() in ('1', 'true', 'yes', 'y')
     
     # 基础分默认值
     DEFAULT_BASE_SCORE = 80

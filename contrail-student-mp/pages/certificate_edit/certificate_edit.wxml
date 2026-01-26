@@ -11,59 +11,80 @@
 <!-- Main Page Content -->
 <view class="container" style="padding-top: {{headerHeight}}px;">
   
-  <!-- Alert Placeholder (Always exists to maintain fixed spacing) -->
-  <view class="alert-placeholder">
-    <!-- Alert Banner (Absolute positioned, overlays placeholder) -->
-    <view class="alert-box" wx:if="{{isRejected}}">
-      <icon type="warn" size="18" color="#f44336"></icon>
-      <text class="alert-text">驳回原因：{{rejectReason}}</text>
+  <!-- Loading State -->
+  <block wx:if="{{isLoadingCertTypes}}">
+    <view class="empty-state">
+      <text class="empty-text">加载中...</text>
     </view>
-  </view>
+  </block>
 
-  <!-- White Card Container -->
-  <view class="content-card">
-    
-    <!-- 1. Certificate Name Selection (Row) -->
-    <view class="form-item-row" bindtap="togglePicker">
-      <view class="row-label">证书名称</view>
-      <view class="row-value {{selectedCert ? '' : 'placeholder'}}" style="opacity: {{isRejected ? 0.5 : 1}}">
-        {{selectedCert || '请选择'}}
+  <!-- Empty State: No Certificate Types -->
+  <block wx:elif="{{hasNoCertTypes}}">
+    <view class="empty-state">
+      <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
+      <text class="empty-title">暂无证书需要提交</text>
+      <text class="empty-desc">您当前部门暂未配置需要提交的证书类型</text>
+    </view>
+  </block>
+
+  <!-- Normal Form Content -->
+  <block wx:else>
+    <!-- Alert Placeholder (Always exists to maintain fixed spacing) -->
+    <view class="alert-placeholder">
+      <!-- Alert Banner (Absolute positioned, overlays placeholder) -->
+      <view class="alert-box" wx:if="{{isRejected}}">
+        <icon type="warn" size="18" color="#f44336"></icon>
+        <text class="alert-text">驳回原因：{{rejectReason}}</text>
       </view>
     </view>
 
-    <!-- Divider -->
-    <view class="divider"></view>
-
-    <!-- 2. Upload Area -->
-    <view class="upload-area-wrapper">
-      <view class="area-label">上传凭证</view>
+    <!-- White Card Container -->
+    <view class="content-card">
       
-      <!-- Upload Box -->
-      <view class="upload-box" bindtap="onUpload" wx:if="{{!imagePath}}">
-        <view class="upload-dashed">
-          <image src="/images/camera_icon.png" class="camera-icon" mode="aspectFit"></image>
-          <text class="upload-hint">点击上传证书清晰照片</text>
+      <!-- 1. Certificate Name Selection (Row) -->
+      <view class="form-item-row" bindtap="togglePicker">
+        <view class="row-label">证书名称</view>
+        <view class="row-value {{selectedCert ? '' : 'placeholder'}}" style="opacity: {{isRejected ? 0.5 : 1}}">
+          {{selectedCert || '请选择'}}
         </view>
       </view>
 
-      <!-- Preview Box -->
-      <view class="preview-box" wx:else>
-        <image src="{{imagePath}}" class="preview-img" mode="aspectFill" bindtap="previewImage"></image>
-        <view class="remove-btn" catchtap="onRemoveImg">
-          <icon type="clear" size="20" color="#f44336"></icon>
+      <!-- Divider -->
+      <view class="divider"></view>
+
+      <!-- 2. Upload Area -->
+      <view class="upload-area-wrapper">
+        <view class="area-label">上传凭证</view>
+        
+        <!-- Upload Box -->
+        <view class="upload-box" bindtap="onUpload" wx:if="{{!imagePath}}">
+          <view class="upload-dashed">
+            <image src="/images/camera_icon.png" class="camera-icon" mode="aspectFit"></image>
+            <text class="upload-hint">点击上传证书清晰照片</text>
+          </view>
         </view>
+
+        <!-- Preview Box -->
+        <view class="preview-box" wx:else>
+          <image src="{{imagePath}}" class="preview-img" mode="aspectFill" bindtap="previewImage"></image>
+          <view class="remove-btn" catchtap="onRemoveImg">
+            <icon type="clear" size="20" color="#f44336"></icon>
+          </view>
+        </view>
+
+        <text class="warning-text">请确保证书编号和公章清晰可见</text>
       </view>
 
-      <text class="warning-text">请确保证书编号和公章清晰可见</text>
     </view>
-
-  </view>
+  </block>
 
 </view>
 
-  <!-- Bottom Submit Button -->
-  <view class="footer-btn-area">
-    <button class="submit-btn" bindtap="onSubmit">提交审核</button>
+  <!-- Bottom Submit Button (Only show when has certificate types) -->
+  <view class="footer-btn-area" wx:if="{{!hasNoCertTypes && !isLoadingCertTypes}}">
+    <button class="submit-btn {{isSubmitting ? 'disabled' : ''}}" bindtap="onSubmit" disabled="{{isSubmitting}}">
+      {{isSubmitting ? '提交中...' : '提交审核'}}
+    </button>
   </view>
 
   <!-- Bottom Sheet Picker -->

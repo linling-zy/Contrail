@@ -5,6 +5,7 @@ Werkzeug==2.3.7  # 包含密码哈希功能，与 Flask 2.3.3 兼容
 # 数据库 ORM
 Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.23
+Flask-Migrate==4.0.5  # 数据库迁移工具
 
 # 定时任务
 Flask-APScheduler==1.13.0
@@ -24,3 +25,8 @@ PyMySQL==1.1.0
 # 环境变量管理
 python-dotenv==1.0.0
 
+# MinIO (Presigned URL)
+minio==7.2.10
+
+# RSA 加密
+cryptography==42.0.0

@@ -6,6 +6,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from flask_apscheduler import APScheduler
+from flask_migrate import Migrate
 
 # 数据库 ORM 实例
 db = SQLAlchemy()
@@ -15,4 +16,7 @@ jwt = JWTManager()
 
 # 定时任务调度器实例
 scheduler = APScheduler()
+
+# 数据库迁移实例
+migrate = Migrate()
 

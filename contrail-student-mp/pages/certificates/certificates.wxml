@@ -6,8 +6,15 @@
 <!-- Main Content Area -->
 <scroll-view class="content-scroll" scroll-y style="padding-top: {{paddingTop}}px; height: {{scrollViewHeight}}px;">
   <view class="cert-list">
+    <!-- Loading State -->
+    <block wx:if="{{isLoading}}">
+      <view class="loading-state">
+        <text>加载中...</text>
+      </view>
+    </block>
+
     <!-- List Items -->
-    <block wx:if="{{certificates.length > 0}}">
+    <block wx:elif="{{certificates.length > 0}}">
       <view class="cert-card" wx:for="{{certificates}}" wx:key="id" bindtap="onItemClick" data-item="{{item}}">
         <!-- Left: Thumbnail/Icon -->
         <view class="card-thumb">

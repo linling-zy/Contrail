@@ -5,7 +5,7 @@
 """
 from flask import Flask
 from config import config
-from app.extensions import db, jwt, scheduler
+from app.extensions import db, jwt, scheduler, migrate
 from app.tasks import register_scheduled_tasks
 
 
@@ -41,10 +41,9 @@ def create_app(config_name='default'):
     # 注册定时任务
     register_scheduled_tasks()
     
-    # 创建数据库表（开发环境使用）
-    with app.app_context():
-        db.create_all()
-        print("[初始化] 数据库表已创建/更新")
+    # 注意：不再使用 db.create_all()
+    # 数据库迁移通过 Flask-Migrate 管理
+    # 使用命令: flask db upgrade 来应用迁移
     
     return app
 
@@ -55,6 +54,9 @@ def initialize_extensions(app):
     """
     # 初始化数据库
     db.init_app(app)
+    
+    # 初始化数据库迁移
+    migrate.init_app(app, db)
     
     # 初始化 JWT
     jwt.init_app(app)
