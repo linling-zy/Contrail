@@ -72,5 +72,8 @@ def register_blueprints(app):
     注册所有蓝图
     """
     from app.api import api_bp
+    from app.api.admin_auth import admin_bp
     app.register_blueprint(api_bp)
+    app.register_blueprint(admin_bp)
     print("[初始化] API 蓝图已注册")
+    print("[初始化] 管理员 API 蓝图已注册")

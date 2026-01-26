@@ -1,6 +1,6 @@
 """
 数据库模型定义
-包含 User, ScoreLog, Certificate, Comment, CertificateType 五个核心模型
+包含 User, ScoreLog, Certificate, Comment, CertificateType, AdminUser 等核心模型
 """
 from datetime import datetime
 from app.extensions import db
@@ -287,4 +287,65 @@ class CertificateType(db.Model):
     
     def __repr__(self):
         return f'<CertificateType {self.id}: {self.name}>'
+
+
+# 管理员和部门的多对多关联表
+admin_departments = db.Table(
+    'admin_departments',
+    db.Column('admin_id', db.Integer, db.ForeignKey('admin_users.id'), primary_key=True, comment='管理员ID'),
+    db.Column('department_id', db.Integer, db.ForeignKey('departments.id'), primary_key=True, comment='部门ID'),
+    db.Column('create_time', db.DateTime, default=datetime.utcnow, comment='关联创建时间')
+)
+
+
+class AdminUser(db.Model):
+    """
+    管理员用户模型
+    存储管理员账号信息，支持超级管理员和普通管理员两种角色
+    普通管理员通过 admin_departments 关联表管理特定部门
+    """
+    __tablename__ = 'admin_users'
+    
+    # 角色枚举
+    ROLE_SUPER = 'super'  # 超级管理员
+    ROLE_NORMAL = 'normal'  # 普通管理员
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment='管理员ID，主键')
+    username = db.Column(db.String(50), unique=True, nullable=False, index=True, comment='登录账号（唯一）')
+    password_hash = db.Column(db.String(255), nullable=False, comment='密码哈希值')
+    name = db.Column(db.String(50), nullable=False, comment='真实姓名')
+    role = db.Column(db.String(20), default=ROLE_NORMAL, nullable=False, index=True, comment='角色：super(超级管理员) 或 normal(普通管理员)')
+    create_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, comment='创建时间')
+    
+    # 关系：一个管理员可以管理多个部门（多对多）
+    managed_departments = db.relationship(
+        'Department',
+        secondary='admin_departments',
+        backref='admins',
+        lazy='dynamic'
+    )
+    
+    def set_password(self, password):
+        """设置密码（自动哈希）"""
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        """验证密码"""
+        return check_password_hash(self.password_hash, password)
+    
+    def to_dict(self, include_departments=False):
+        """转换为字典（用于 JSON 序列化）"""
+        data = {
+            'id': self.id,
+            'username': self.username,
+            'name': self.name,
+            'role': self.role,
+            'create_time': self.create_time.isoformat() if self.create_time else None,
+        }
+        if include_departments:
+            data['managed_departments'] = [dept.to_dict() for dept in self.managed_departments.all()]
+        return data
+    
+    def __repr__(self):
+        return f'<AdminUser {self.username}: {self.name} (role={self.role})>'
 
