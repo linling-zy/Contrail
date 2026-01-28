@@ -1,18 +1,25 @@
 
-const mockStudents = Array.from({ length: 20 }).map((_, index) => ({
-    id: index + 1,
-    name: `学生${index + 1}`,
-    idCard: `51010020000101${String(index).padStart(4, '0')}`,
-    college: '飞行技术学院',
-    className: '飞行2301',
-    totalScore: 90 + Math.floor(Math.random() * 20), // 90-110
-    status: {
-        preliminary: Math.random() > 0.1 ? 'qualified' : 'failed',
-        medical: Math.random() > 0.3 ? (Math.random() > 0.5 ? 'qualified' : 'pending') : 'failed',
-        political: 'pending',
-        admission: 'pending'
+
+const mockStudents = Array.from({ length: 50 }).map((_, index) => {
+    // 简单的班级分配逻辑
+    const classId = [101, 102, 103, 104][index % 4]
+    const classIds = { 101: '机械241', 102: '机械242', 103: '飞行2301', 104: '飞行2302' }
+    return {
+        id: index + 1,
+        name: `学生${index + 1}`,
+        idCard: `51010020000101${String(index).padStart(4, '0')}`,
+        college: classId > 102 ? '飞行技术学院' : '民航与航空学院',
+        classId: classId,
+        className: classIds[classId],
+        totalScore: 90 + Math.floor(Math.random() * 20), // 90-110
+        status: {
+            preliminary: Math.random() > 0.1 ? 'qualified' : 'failed',
+            medical: Math.random() > 0.3 ? (Math.random() > 0.5 ? 'qualified' : 'pending') : 'failed',
+            political: 'pending',
+            admission: 'pending'
+        }
     }
-}))
+})
 
 /**
  * 获取学生列表
@@ -21,6 +28,9 @@ export function getStudents(params) {
     return new Promise((resolve) => {
         setTimeout(() => {
             let list = [...mockStudents]
+            if (params.classId) {
+                list = list.filter(item => item.classId === Number(params.classId))
+            }
             if (params.name) {
                 list = list.filter(item => item.name.includes(params.name) || item.idCard.includes(params.name))
             }

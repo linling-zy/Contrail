@@ -37,12 +37,27 @@ const routes = [
     {
         path: '/students',
         component: Layout,
+
         children: [
             {
                 path: '',
-                name: 'Students',
-                component: () => import('@/views/students/index.vue'),
+                name: 'DepartmentCards',
+                component: () => import('@/views/students/DepartmentCards.vue'),
                 meta: { title: '学生管理', icon: 'User' }
+            },
+            {
+                path: 'class/:classId',
+                name: 'ClassList',
+                component: () => import('@/views/students/ClassList.vue'),
+                meta: { title: '班级学生', activeMenu: '/students' },
+                hidden: true
+            },
+            {
+                path: 'status/:id',
+                name: 'StudentStatusEdit',
+                component: () => import('@/views/students/StatusEdit.vue'),
+                meta: { title: '状态档案管理', activeMenu: '/students' },
+                hidden: true
             }
         ]
     },
