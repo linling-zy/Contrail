@@ -14,11 +14,17 @@
         <el-form-item>
           <el-button type="primary" icon="Search" @click="handleFilter">查询</el-button>
         </el-form-item>
+        <el-form-item>
+           <el-radio-group v-model="viewMode">
+             <el-radio-button label="table">列表模式</el-radio-button>
+             <el-radio-button label="card">卡片模式</el-radio-button>
+           </el-radio-group>
+        </el-form-item>
       </el-form>
     </el-card>
 
     <!-- 表格区域 -->
-    <el-card class="table-container">
+    <el-card class="table-container" v-if="viewMode === 'table'">
       <el-table v-loading="loading" :data="tableData" border style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" align="center" />
         
@@ -71,6 +77,33 @@
       </el-table>
     </el-card>
 
+    <!-- 卡片模式 -->
+    <div v-else class="card-mode-wrapper">
+       <el-empty v-if="!tableData.length" description="暂无待处理数据" />
+       
+       <div v-else class="card-view-container">
+          <CertificateCard 
+            :data="currentCert" 
+            @approve="handleApprove" 
+            @reject="handleReject"
+          >
+            <template #append-actions>
+              <div class="nav-buttons">
+                <el-button @click="handlePrev" :disabled="currentIndex <= 0" icon="ArrowLeft">上一个</el-button>
+                <el-button @click="handleNext" :disabled="currentIndex >= tableData.length - 1">
+                  下一个 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+                </el-button>
+              </div>
+            </template>
+          </CertificateCard>
+
+          <div class="pagination-info">
+             当前第 {{ currentIndex + 1 }} 条 / 共 {{ tableData.length }} 条
+          </div>
+       </div>
+    </div>
+
+
     <!-- 驳回弹窗 -->
     <el-dialog v-model="rejectDialogVisible" title="驳回审核" width="400px">
       <el-form :model="rejectForm" label-width="80px">
@@ -94,16 +127,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { getCertificates, updateStatus } from '@/api/mock/certificate'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import CertificateCard from './components/CertificateCard.vue'
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
 
 const loading = ref(false)
 const tableData = ref([])
 const queryParams = reactive({
   status: ''
 })
+
+const viewMode = ref('table')
+const currentIndex = ref(0)
+const currentCert = computed(() => tableData.value[currentIndex.value] || {})
 
 // 驳回相关
 const rejectDialogVisible = ref(false)
@@ -126,6 +166,7 @@ const getList = async () => {
 
 const handleFilter = () => {
   getList()
+  currentIndex.value = 0
 }
 
 const getStatusType = (status) => {
@@ -160,7 +201,7 @@ const handleApprove = (row) => {
     try {
       await updateStatus(row.id, 1) // 1: 通过
       ElMessage.success('审核通过')
-      getList()
+      getList() // 重新获取列表，界面会根据currentIndex更新
     } catch (error) {
       ElMessage.error('操作失败')
     }
@@ -189,6 +230,21 @@ const confirmReject = async () => {
   }
 }
 
+// Card Navigation
+const handlePrev = () => {
+  if (currentIndex.value > 0) currentIndex.value--
+}
+
+const handleNext = () => {
+  if (currentIndex.value < tableData.value.length - 1) currentIndex.value++
+}
+
+watch(tableData, (newVal) => {
+   if (currentIndex.value >= newVal.length) {
+       currentIndex.value = 0
+   }
+})
+
 onMounted(() => {
   getList()
 })
@@ -200,5 +256,21 @@ onMounted(() => {
 }
 .filter-container {
   margin-bottom: 20px;
+}
+.card-view-container {
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.pagination-info {
+  margin-top: 15px;
+  color: #909399;
+  font-size: 14px;
+}
+.nav-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
 }
 </style>
