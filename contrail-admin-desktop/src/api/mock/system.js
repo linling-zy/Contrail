@@ -1,11 +1,52 @@
 
 
 // 模拟初始部门数据 (扁平化，仅一级班级)
+// 模拟初始部门数据 (扁平化，仅一级班级)
 const departments = [
-    { id: 101, name: '民航与航空学院2023级机械241班', studentCount: 45 },
-    { id: 102, name: '民航与航空学院2023级机械242班', studentCount: 42 },
-    { id: 103, name: '飞行技术学院2023级飞行2301班', studentCount: 30 },
-    { id: 104, name: '飞行技术学院2023级飞行2302班', studentCount: 28 }
+    {
+        id: 101,
+        name: '民航与航空学院2023级机械241班',
+        studentCount: 45,
+        college: '民航与航空学院',
+        grade: '2023级',
+        major: '机械',
+        className: '241班',
+        autoScoreTime: '',
+        boundCerts: []
+    },
+    {
+        id: 102,
+        name: '民航与航空学院2023级机械242班',
+        studentCount: 42,
+        college: '民航与航空学院',
+        grade: '2023级',
+        major: '机械',
+        className: '242班',
+        autoScoreTime: '',
+        boundCerts: []
+    },
+    {
+        id: 103,
+        name: '飞行技术学院2023级飞行2301班',
+        studentCount: 30,
+        college: '飞行技术学院',
+        grade: '2023级',
+        major: '飞行技术',
+        className: '2301班',
+        autoScoreTime: '',
+        boundCerts: []
+    },
+    {
+        id: 104,
+        name: '飞行技术学院2023级飞行2302班',
+        studentCount: 28,
+        college: '飞行技术学院',
+        grade: '2023级',
+        major: '飞行技术',
+        className: '2302班',
+        autoScoreTime: '',
+        boundCerts: []
+    }
 ]
 
 // 模拟证书类型
@@ -24,6 +65,74 @@ let admins = [
 
 export function getDepartments() {
     return Promise.resolve({ code: 200, data: departments })
+}
+
+export function getDepartmentDetail(id) {
+    return new Promise(resolve => {
+        const dept = departments.find(d => d.id === Number(id))
+        resolve({ code: 200, data: dept || {} })
+    })
+}
+
+export function updateDepartment(data) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const index = departments.findIndex(d => d.id === data.id)
+            if (index !== -1) {
+                // Merge updates
+                departments[index] = { ...departments[index], ...data }
+                // Reconstruct full name if parts are present
+                const d = departments[index]
+                if (d.college && d.grade && d.major && d.className) {
+                    d.name = `${d.college}${d.grade}${d.major}${d.className}`
+                }
+                resolve({ code: 200, message: '更新成功' })
+            } else {
+                resolve({ code: 404, message: '部门未找到' })
+            }
+        }, 300)
+    })
+}
+
+
+export function getAdmins() {
+    return Promise.resolve({ code: 200, data: admins })
+}
+
+export function createAdmin(data) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const newId = admins.length ? Math.max(...admins.map(a => a.id)) + 1 : 1
+            admins.push({
+                id: newId,
+                ...data
+            })
+            resolve({ code: 200, message: '管理员创建成功' })
+        }, 300)
+    })
+}
+
+export function updateAdmin(data) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const index = admins.findIndex(a => a.id === data.id)
+            if (index !== -1) {
+                admins[index] = { ...admins[index], ...data }
+                resolve({ code: 200, message: '更新成功' })
+            } else {
+                resolve({ code: 404, message: '管理员未找到' })
+            }
+        }, 300)
+    })
+}
+
+export function deleteAdmin(id) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            admins = admins.filter(a => a.id !== id)
+            resolve({ code: 200, message: '删除成功' })
+        }, 300)
+    })
 }
 
 export function getCertTypes() {
@@ -45,9 +154,6 @@ export function saveClassCerts(classId, certIds) {
     })
 }
 
-export function getAdmins() {
-    return Promise.resolve({ code: 200, data: admins })
-}
 
 export function addDepartment(data) {
     return new Promise(resolve => {

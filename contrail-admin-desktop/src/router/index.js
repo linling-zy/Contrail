@@ -74,6 +74,13 @@ const routes = [
                 meta: { title: '部门管理' }
             },
             {
+                path: 'department/:id',
+                name: 'DepartmentDetail',
+                component: () => import('@/views/system/department-detail.vue'),
+                meta: { title: '部门详情', activeMenu: '/system/department' },
+                hidden: true
+            },
+            {
                 path: 'cert-type',
                 name: 'CertType',
                 component: () => import('@/views/system/cert-type.vue'),

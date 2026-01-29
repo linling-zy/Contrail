@@ -4,7 +4,16 @@
       <template #header>
         <div class="header-row">
           <span>组织架构与证书配置</span>
-          <el-button type="primary" icon="Plus" @click="handleAdd">添加部门</el-button>
+          <div class="header-right">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索部门名称"
+              prefix-icon="Search"
+              clearable
+              style="width: 200px; margin-right: 15px"
+            />
+            <el-button type="primary" icon="Plus" @click="handleAdd">添加部门</el-button>
+          </div>
         </div>
       </template>
     </el-card>
@@ -12,7 +21,7 @@
     <div class="content-wrapper">
       <el-row :gutter="20">
         <el-col
-          v-for="dept in deptData"
+          v-for="dept in filteredDepts"
           :key="dept.id"
           :xs="24"
           :sm="12"
@@ -20,46 +29,19 @@
           :lg="6"
           class="card-col"
         >
-          <el-card shadow="hover" class="dept-card">
+          <el-card shadow="hover" class="dept-card" @click="handleDetail(dept)">
             <div class="card-content">
               <div class="icon-wrapper">
                  <el-icon :size="48" color="#409EFF"><OfficeBuilding /></el-icon>
               </div>
               <h3 class="dept-name">{{ dept.name }}</h3>
               
-              <div class="actions">
-                <el-button 
-                   type="primary" 
-                   icon="Setting" 
-                   round
-                   @click="handleConfig(dept)"
-                >
-                  配置证书
-                </el-button>
-              </div>
             </div>
           </el-card>
         </el-col>
       </el-row>
     </div>
 
-    <!-- 证书配置弹窗 -->
-    <el-dialog v-model="configVisible" title="配置班级证书" width="600px">
-      <div style="text-align: center">
-        <el-transfer
-          v-model="currentBoundCerts"
-          :data="allCertTypes"
-          :titles="['可选证书', '已选证书']"
-          :props="{ key: 'id', label: 'name' }"
-        />
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="configVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveConfig">保存</el-button>
-        </span>
-      </template>
-    </el-dialog>
 
     <!-- 添加部门弹窗 -->
     <el-dialog v-model="addDialogVisible" title="添加部门" width="400px">
@@ -79,18 +61,27 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { getDepartments, getCertTypes, saveClassCerts, addDepartment } from '@/api/mock/system'
 import { ElMessage } from 'element-plus'
-import { Setting, OfficeBuilding, Plus } from '@element-plus/icons-vue'
+import { Setting, OfficeBuilding, Plus, Search } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const deptData = ref([])
 const allCertTypes = ref([])
+const searchQuery = ref('')
 
-// 配置相关
-const configVisible = ref(false)
-const currentClassId = ref(null)
-const currentBoundCerts = ref([])
+const filteredDepts = computed(() => {
+  if (!searchQuery.value) return deptData.value
+  return deptData.value.filter(dept => 
+    dept.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  )
+})
+
+// 配置相关 (已移动到详情页)
+// 之前逻辑已废弃，保留空壳防止报错或直接清理
+// 这里直接清理
 
 // 添加部门相关
 const addDialogVisible = ref(false)
@@ -104,27 +95,11 @@ const addRules = {
 const loadData = async () => {
   const deptRes = await getDepartments()
   deptData.value = deptRes.data
-  
-  const certRes = await getCertTypes()
-  allCertTypes.value = certRes.data
 }
 
-const handleConfig = (row) => {
-  currentClassId.value = row.id
-  // row.boundCerts 是 mock 数据里的数组，浅拷贝过来
-  currentBoundCerts.value = [...(row.boundCerts || [])]
-  configVisible.value = true
-}
-
-const saveConfig = async () => {
-  try {
-    await saveClassCerts(currentClassId.value, currentBoundCerts.value)
-    ElMessage.success('配置已保存')
-    configVisible.value = false
-    loadData()
-  } catch (error) {
-    ElMessage.error('保存失败')
-  }
+// Navigate to detail page
+const handleDetail = (row) => {
+  router.push(`/system/department/${row.id}`)
 }
 
 const handleAdd = () => {
