@@ -11,10 +11,11 @@
 <style scoped>
 .app-main {
   /* 50 = navbar  */
-  min-height: calc(100vh - 50px);
+  height: calc(100vh - 50px);
   width: 100%;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 20px;
   background-color: #f0f2f5;
 }

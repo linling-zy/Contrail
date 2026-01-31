@@ -3,10 +3,14 @@
 采用工厂模式创建 Flask 应用实例
 初始化数据库、JWT、定时任务等扩展
 """
+import logging
 from flask import Flask
 from config import config
 from app.extensions import db, jwt, scheduler, migrate
 from app.tasks import register_scheduled_tasks
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(config_name='default'):
@@ -64,7 +68,7 @@ def initialize_extensions(app):
     # 初始化定时任务调度器
     scheduler.init_app(app)
     scheduler.start()
-    print("[初始化] 定时任务调度器已启动")
+    logger.info("[初始化] 定时任务调度器已启动")
 
 
 def register_blueprints(app):
@@ -75,5 +79,5 @@ def register_blueprints(app):
     from app.api.admin_auth import admin_bp
     app.register_blueprint(api_bp)
     app.register_blueprint(admin_bp)
-    print("[初始化] API 蓝图已注册")
-    print("[初始化] 管理员 API 蓝图已注册")
+    logger.info("[初始化] API 蓝图已注册")
+    logger.info("[初始化] 管理员 API 蓝图已注册")

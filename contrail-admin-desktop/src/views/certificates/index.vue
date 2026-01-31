@@ -1,125 +1,112 @@
 <template>
-  <div class="app-container">
-    <!-- 筛选栏 -->
-    <el-card class="filter-container">
-      <el-form :inline="true" :model="queryParams">
-        <el-form-item label="审核状态">
-          <el-select v-model="queryParams.status" placeholder="全部" clearable style="width: 150px" @change="handleFilter">
-            <el-option label="全部" value="" />
-            <el-option label="待审核" value="0" />
-            <el-option label="已通过" value="1" />
-            <el-option label="已驳回" value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" icon="Search" @click="handleFilter">查询</el-button>
-        </el-form-item>
-        <el-form-item>
-           <el-radio-group v-model="viewMode">
-             <el-radio-button label="table">列表模式</el-radio-button>
-             <el-radio-button label="card">卡片模式</el-radio-button>
-           </el-radio-group>
-        </el-form-item>
-      </el-form>
-    </el-card>
+  <div class="workbench-container">
+    <!-- Left Sidebar: The List -->
+    <aside class="sidebar-panel">
+      <!-- Sidebar Header: Filters -->
+      <div class="sidebar-header">
+        <h2 class="sidebar-title">证书审核</h2>
+        <div class="filter-group">
+          <el-input 
+            v-model="searchText" 
+            placeholder="搜索学生或证书..." 
+            prefix-icon="Search"
+            clearable
+            class="modern-search"
+          />
+          <el-dropdown trigger="click" @command="handleStatusFilter" class="filter-dropdown">
+            <el-button circle class="filter-btn">
+              <el-icon><Filter /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="" :class="{ active: queryParams.status === '' }">全部状态</el-dropdown-item>
+                <el-dropdown-item command="0" :class="{ active: queryParams.status === '0' }">待审核</el-dropdown-item>
+                <el-dropdown-item command="1" :class="{ active: queryParams.status === '1' }">已通过</el-dropdown-item>
+                <el-dropdown-item command="2" :class="{ active: queryParams.status === '2' }">已驳回</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+        <!-- Status Summary Chips -->
+        <div class="status-chips">
+           <span class="chip" :class="{ active: queryParams.status === '' }" @click="handleStatusFilter('')">全部</span>
+           <span class="chip warning" :class="{ active: queryParams.status === '0' }" @click="handleStatusFilter('0')">待审</span>
+           <span class="chip success" :class="{ active: queryParams.status === '1' }" @click="handleStatusFilter('1')">通过</span>
+           <span class="chip danger" :class="{ active: queryParams.status === '2' }" @click="handleStatusFilter('2')">驳回</span>
+        </div>
+      </div>
 
-    <!-- 表格区域 -->
-    <el-card class="table-container" v-if="viewMode === 'table'">
-      <el-table v-loading="loading" :data="tableData" border style="width: 100%">
-        <el-table-column prop="id" label="ID" width="80" align="center" />
-        
-        <el-table-column label="证书图片" width="120" align="center">
-          <template #default="{ row }">
-            <el-image 
-              style="width: 80px; height: 60px" 
-              :src="row.imgUrl" 
-              :preview-src-list="[row.imgUrl]" 
-              fit="cover"
-              preview-teleported
-            />
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="studentName" label="学生姓名" width="120" align="center" />
-        <el-table-column prop="className" label="班级" width="150" align="center" />
-        <el-table-column prop="certName" label="证书名称" min-width="150" align="center" />
-        
-        <el-table-column prop="status" label="状态" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="uploadTime" label="上传时间" width="180" align="center" />
-
-        <el-table-column label="操作" width="200" align="center" fixed="right">
-          <template #default="{ row }">
-            <div v-if="row.status === 0">
-              <el-button type="success" link size="small" @click="handleApprove(row)">通过</el-button>
-              <el-button type="danger" link size="small" @click="handleReject(row)">驳回</el-button>
-            </div>
-            <div v-else>
-              <el-popover placement="left" title="详情" :width="200" trigger="hover">
-                <template #reference>
-                  <el-button type="primary" link size="small">查看详情</el-button>
-                </template>
-                <div>
-                  <p v-if="row.status === 2">驳回原因: {{ row.rejectReason }}</p>
-                  <p v-else>审核已完成</p>
-                  <p>审核时间: {{ new Date().toLocaleString() }}</p>
+      <!-- Sidebar List -->
+      <div class="sidebar-content" v-loading="loading">
+        <el-scrollbar>
+          <div v-if="filteredList.length === 0" class="empty-list">
+            <el-empty description="暂无符合条件的证书" :image-size="80" />
+          </div>
+          <transition-group name="list-anim" tag="div">
+            <div 
+              v-for="(item, index) in filteredList" 
+              :key="item.id"
+              class="list-item"
+              :class="{ active: currentId === item.id }"
+              @click="handleSelect(item)"
+            >
+              <div class="item-status-strip" :class="getStatusClass(item.status)"></div>
+              <div class="item-main">
+                <div class="item-header">
+                   <span class="student-name">{{ item.studentName }}</span>
+                   <span class="time-ago">{{ formatTime(item.uploadTime) }}</span>
                 </div>
-              </el-popover>
+                <div class="cert-name">{{ item.certName }}</div>
+                <div class="item-footer">
+                  <span class="class-name">{{ item.className }}</span>
+                  <el-tag size="small" :type="getStatusType(item.status)" effect="plain" round class="status-tag">
+                     {{ getStatusText(item.status) }}
+                  </el-tag>
+                </div>
+              </div>
             </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+          </transition-group>
+        </el-scrollbar>
+      </div>
+    </aside>
 
-    <!-- 卡片模式 -->
-    <div v-else class="card-mode-wrapper">
-       <el-empty v-if="!tableData.length" description="暂无待处理数据" />
-       
-       <div v-else class="card-view-container">
+    <!-- Right Canvas: The Detail -->
+    <main class="detail-canvas">
+      <!-- Key is used to force re-render transition when ID changes -->
+      <transition name="fade-slide" mode="out-in">
+        <div v-if="currentCert" :key="currentCert.id" class="detail-wrapper">
           <CertificateCard 
             :data="currentCert" 
             @approve="handleApprove" 
             @reject="handleReject"
-          >
-            <template #append-actions>
-              <div class="nav-buttons">
-                <el-button @click="handlePrev" :disabled="currentIndex <= 0" icon="ArrowLeft">上一个</el-button>
-                <el-button @click="handleNext" :disabled="currentIndex >= tableData.length - 1">
-                  下一个 <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-                </el-button>
-              </div>
-            </template>
-          </CertificateCard>
-
-          <div class="pagination-info">
-             当前第 {{ currentIndex + 1 }} 条 / 共 {{ tableData.length }} 条
+          />
+        </div>
+        <div v-else class="empty-state-canvas" :key="'empty'">
+          <div class="empty-content">
+            <img src="https://cdni.iconscout.com/illustration/premium/thumb/selecting-file-illustration-download-in-svg-png-gif-file-formats--select-document-folder-business-miscellaneous-pack-illustrations-5231718.png?f=webp" alt="Select" class="empty-img"/>
+            <h3>准备好开始工作了</h3>
+            <p>从左侧列表中选择一个项目开始审核</p>
           </div>
-       </div>
-    </div>
+        </div>
+      </transition>
+    </main>
 
-
-    <!-- 驳回弹窗 -->
-    <el-dialog v-model="rejectDialogVisible" title="驳回审核" width="400px">
-      <el-form :model="rejectForm" label-width="80px">
-        <el-form-item label="驳回原因">
+    <!-- 驳回弹窗 (Reused Logic) -->
+    <el-dialog v-model="rejectDialogVisible" title="驳回审核" width="400px" class="glass-dialog">
+      <el-form :model="rejectForm">
+        <el-form-item>
           <el-input 
             v-model="rejectForm.reason" 
             type="textarea" 
-            placeholder="请输入驳回原因" 
-            :rows="3"
+            placeholder="请输入驳回原因..." 
+            :rows="4"
           />
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="rejectDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="confirmReject">确认驳回</el-button>
+          <el-button type="danger" @click="confirmReject">确认驳回</el-button>
         </span>
       </template>
     </el-dialog>
@@ -127,36 +114,65 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
 import { getCertificates, updateStatus } from '@/api/mock/certificate'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Search, Filter } from '@element-plus/icons-vue'
 import CertificateCard from './components/CertificateCard.vue'
-import 'element-plus/theme-chalk/el-message.css'
-import 'element-plus/theme-chalk/el-message-box.css'
 
+// State
 const loading = ref(false)
 const tableData = ref([])
+const searchText = ref('')
 const queryParams = reactive({
-  status: ''
+  status: '' // Default filter
 })
 
-const viewMode = ref('table')
-const currentIndex = ref(0)
-const currentCert = computed(() => tableData.value[currentIndex.value] || {})
+const currentId = ref(null)
 
-// 驳回相关
+// Derived State
+const filteredList = computed(() => {
+  let list = tableData.value;
+  // 1. Filter by Text
+  if (searchText.value) {
+    list = list.filter(item => 
+      item.studentName.includes(searchText.value) || 
+      item.certName.includes(searchText.value)
+    );
+  }
+  // 2. Filter by Status
+  if (queryParams.status !== '') {
+    // Note: status from select/mock might be string or number, force string comparison
+    list = list.filter(item => String(item.status) === String(queryParams.status));
+  }
+  return list;
+})
+
+const currentCert = computed(() => {
+  // Find in the FULL tableData to ensure we can show it even if it momentarily disappears from filter
+  // But for better UX, usually we want to confirm it exists
+  return tableData.value.find(item => item.id === currentId.value) || null
+})
+
+// Reject Dialog
 const rejectDialogVisible = ref(false)
 const rejectForm = reactive({
   id: null,
   reason: ''
 })
 
+// Lifecycle
+onMounted(() => {
+  getList()
+})
+
+// Methods
 const getList = async () => {
   loading.value = true
   try {
-    const res = await getCertificates(queryParams)
+    const res = await getCertificates({}) // Fetch ALL data, handle filtering locally for smoothness
     tableData.value = res.data.list
+    autoSelectFirst()
   } catch (error) {
     ElMessage.error('获取列表失败')
   } finally {
@@ -164,51 +180,106 @@ const getList = async () => {
   }
 }
 
-const handleFilter = () => {
-  getList()
-  currentIndex.value = 0
+const autoSelectFirst = () => {
+  if (filteredList.value.length > 0 && !currentId.value) {
+    currentId.value = filteredList.value[0].id
+  }
 }
 
+const handleStatusFilter = (command) => {
+  queryParams.status = command
+  // Clear selection if current item is filtered out? 
+  // Or keep it? keeping it is better usually, but if we filter strictly:
+  nextTick(() => {
+    if (filteredList.value.length > 0) {
+       // if current item is NOT in filtered list, select the first one
+       const exists = filteredList.value.find(item => item.id === currentId.value)
+       if (!exists) {
+         currentId.value = filteredList.value[0].id
+       }
+    } else {
+       currentId.value = null
+    }
+  })
+}
+
+const handleSelect = (item) => {
+  currentId.value = item.id
+}
+
+// *** Auto-Advance Logic ***
+const advanceToNext = (processedId) => {
+  // 1. Find the index where the processed item WAS
+  // Since filters are computed, if we change the status, the item might be removed from filteredList instantly
+  // So we need to find the "Next" candidate.
+  
+  // If we assume the item IS STILL visible (e.g. "All" filter), we just stay or move next?
+  // If we filter "Pending", item status changes to "Success", it disappears.
+  
+  // The 'filteredList' will update automatically.
+  // We just need to check if currentId is still valid in filteredList
+  
+  nextTick(() => {
+    const stillExists = filteredList.value.find(item => item.id === currentId.value)
+    if (!stillExists) {
+       // Item disappeared (good, it was processed).
+       // Select the FIRST item in the new filtered list (which was previously the second item, or the one that shifted up)
+       if (filteredList.value.length > 0) {
+         // Silky transition: Select the new top item (or the one at previous index if we want to be fancy)
+         // Simple strategy: Select first available.
+         currentId.value = filteredList.value[0].id
+       } else {
+         currentId.value = null
+       }
+    } else {
+      // Item still exists (e.g. "All" filter).
+      // Maybe user wants to stay on it to see the result, OR move next.
+      // User said: "Next card smoothly switches up".
+      // Let's find current index and move +1
+      const idx = filteredList.value.findIndex(item => item.id === currentId.value)
+      if (idx !== -1 && idx < filteredList.value.length - 1) {
+         currentId.value = filteredList.value[idx + 1].id
+      }
+    }
+  })
+}
+
+// Helpers
 const getStatusType = (status) => {
-  const map = {
-    0: 'warning',
-    1: 'success',
-    2: 'danger'
-  }
+  const map = { 0: 'warning', 1: 'success', 2: 'danger' }
   return map[status]
 }
-
 const getStatusText = (status) => {
-  const map = {
-    0: '待审核',
-    1: '已通过',
-    2: '已驳回'
-  }
+  const map = { 0: '待审核', 1: '已通过', 2: '已驳回' }
   return map[status]
 }
-
-// 通过审核
-const handleApprove = (row) => {
-  ElMessageBox.confirm(
-    `确认通过 ${row.studentName} 的 ${row.certName} 申请吗？`,
-    '提示',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'success',
-    }
-  ).then(async () => {
-    try {
-      await updateStatus(row.id, 1) // 1: 通过
-      ElMessage.success('审核通过')
-      getList() // 重新获取列表，界面会根据currentIndex更新
-    } catch (error) {
-      ElMessage.error('操作失败')
-    }
-  }).catch(() => {})
+const getStatusClass = (status) => {
+   const map = { 0: 'bg-warning', 1: 'bg-success', 2: 'bg-danger' }
+   return map[status]
+}
+const formatTime = (timeStr) => {
+  return timeStr ? timeStr.split(' ')[0] : ''
 }
 
-// 驳回审核
+// Actions
+const handleApprove = (row) => {
+  // Optimistic UI update
+  const target = tableData.value.find(i => i.id === row.id)
+  if (target) {
+     target.status = 1 // Update Status
+     ElMessage.success('审核已通过，自动切换下一条')
+     
+     // Trigger Auto Advance
+     advanceToNext(row.id)
+     
+     // Call API in background
+     updateStatus(row.id, 1).catch(() => {
+        target.status = 0 // Revert
+        ElMessage.error('操作失败，已撤回')
+     })
+  }
+}
+
 const handleReject = (row) => {
   rejectForm.id = row.id
   rejectForm.reason = ''
@@ -216,61 +287,272 @@ const handleReject = (row) => {
 }
 
 const confirmReject = async () => {
-  if (!rejectForm.reason) {
-    ElMessage.warning('请输入驳回原因')
-    return
-  }
-  try {
-    await updateStatus(rejectForm.id, 2, rejectForm.reason)
-    ElMessage.success('已驳回')
+  if (!rejectForm.reason) return ElMessage.warning('请输入原因')
+  
+  const target = tableData.value.find(i => i.id === rejectForm.id)
+  if (target) {
+    target.status = 2
+    target.rejectReason = rejectForm.reason
+    ElMessage.success('已驳回，自动切换下一条')
+    
     rejectDialogVisible.value = false
-    getList()
-  } catch (error) {
-    ElMessage.error('操作失败')
+    advanceToNext(target.id)
+    
+     // Call API in background
+     updateStatus(rejectForm.id, 2, rejectForm.reason).catch(() => {
+        target.status = 0 // Revert
+        ElMessage.error('操作失败，已撤回')
+     })
   }
 }
-
-// Card Navigation
-const handlePrev = () => {
-  if (currentIndex.value > 0) currentIndex.value--
-}
-
-const handleNext = () => {
-  if (currentIndex.value < tableData.value.length - 1) currentIndex.value++
-}
-
-watch(tableData, (newVal) => {
-   if (currentIndex.value >= newVal.length) {
-       currentIndex.value = 0
-   }
-})
-
-onMounted(() => {
-  getList()
-})
 </script>
 
 <style scoped lang="scss">
-.app-container {
-  padding: 20px;
+// Tokens
+$bg-sidebar: #ffffff;
+$bg-canvas: #F5F7FA;
+$primary: #409EFF;
+$border: #EBEEF5;
+$text-main: #303133;
+$text-sub: #909399;
+$active-bg: #ecf5ff;
+
+.workbench-container {
+  display: flex;
+  height: calc(100vh - 84px); 
+  background-color: $bg-canvas;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
 }
-.filter-container {
-  margin-bottom: 20px;
-}
-.card-view-container {
-  padding-top: 20px;
+
+// 1. Sidebar Panel
+.sidebar-panel {
+  width: 380px;
+  background: $bg-sidebar;
+  border-right: 1px solid $border;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  z-index: 10;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.02);
+  
+  .sidebar-header {
+    padding: 24px;
+    border-bottom: 1px solid $border;
+    
+    .sidebar-title {
+      margin: 0 0 16px 0;
+      font-size: 20px;
+      font-weight: 700;
+      color: $text-main;
+      letter-spacing: -0.5px;
+    }
+    
+    .filter-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      
+      .modern-search {
+        flex: 1;
+        :deep(.el-input__wrapper) {
+          border-radius: 8px;
+          background-color: #f5f7fa;
+          box-shadow: none !important;
+          padding: 8px 12px;
+          &:hover, &.is-focus { background-color: white; box-shadow: 0 0 0 1px $primary !important; }
+        }
+      }
+      
+      .filter-btn {
+        width: 40px; 
+        height: 40px;
+        border-color: transparent;
+        background: #f5f7fa;
+        &:hover { color: $primary; background: #ecf5ff; }
+      }
+    }
+    
+    .status-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+      
+      .chip {
+        font-size: 13px;
+        padding: 5px 14px;
+        border-radius: 100px;
+        background: #f5f7fa;
+        color: $text-sub;
+        cursor: pointer;
+        white-space: nowrap;
+        font-weight: 500;
+        transition: all 0.2s;
+        
+        &:hover { background: #e6e8eb; }
+        &.active { background: #333; color: white; transform: translateY(-1px); }
+        
+        // Contextual colors for active states
+        &.warning.active { background: #fa8c16; }
+        &.success.active { background: #52c41a; }
+        &.danger.active { background: #F56C6C; }
+      }
+    }
+  }
+  
+  .sidebar-content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    
+    .list-item {
+      padding: 20px 24px;
+      border-bottom: 1px solid #f9fafc;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+      background: white;
+      
+      &:hover {
+        background-color: #fcfcfd;
+        padding-left: 28px; // Subtle shift
+      }
+      
+      &.active {
+        background-color: $active-bg;
+        
+        .item-status-strip {
+          transform: scaleY(1);
+        }
+        .student-name { color: $primary; }
+      }
+      
+      .item-status-strip {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        transform: scaleY(0);
+        transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+        
+        &.bg-warning { background-color: #fa8c16; }
+        &.bg-success { background-color: #52c41a; }
+        &.bg-danger { background-color: #F56C6C; }
+      }
+      
+      .item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        
+        .student-name {
+          font-weight: 700;
+          color: $text-main;
+          font-size: 15px;
+        }
+        .time-ago {
+          font-size: 12px;
+          color: #c0c4cc;
+        }
+      }
+      
+      .cert-name {
+        font-size: 14px;
+        color: $text-sub;
+        margin-bottom: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .item-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        
+        .class-name {
+          font-size: 12px;
+          color: #909399;
+          background: #f5f7fa;
+          padding: 3px 8px;
+          border-radius: 6px;
+        }
+        
+        .status-tag {
+          border-color: transparent;
+        }
+      }
+    }
+  }
 }
-.pagination-info {
-  margin-top: 15px;
-  color: #909399;
-  font-size: 14px;
-}
-.nav-buttons {
-  margin-left: auto;
+
+// 2. Main Canvas
+.detail-canvas {
+  flex: 1;
   display: flex;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow: hidden; // Prevent double scrollbars
+  position: relative;
+  
+  .detail-wrapper {
+    width: 100%;
+    max-width: 1000px;
+    height: 100%;
+    max-height: 800px;
+  }
 }
+
+// 3. Empty State
+.empty-state-canvas {
+  text-align: center;
+  color: $text-sub;
+  
+  .empty-img {
+    width: 240px;
+    margin-bottom: 32px;
+    opacity: 0.9;
+  }
+  
+  h3 {
+    font-size: 20px;
+    color: $text-main;
+    margin-bottom: 12px;
+  }
+}
+
+// 4. Animations
+/* List Animation - Staggered or Grouped */
+.list-anim-enter-active,
+.list-anim-leave-active {
+  transition: all 0.3s ease;
+}
+.list-anim-enter-from,
+.list-anim-leave-to {
+  opacity: 0;
+  transform: translateX(-30px);
+}
+.list-anim-leave-active {
+  position: absolute; // Remove from flow smoothly
+  width: 100%; 
+}
+
+/* Detail Panel Transition - Fade and slightly Slide Up */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-20px) scale(0.98);
+}
+
 </style>
