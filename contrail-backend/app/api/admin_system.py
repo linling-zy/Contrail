@@ -7,9 +7,10 @@
 from flask import request, jsonify
 from app.api.admin_auth import admin_bp
 from app.extensions import db
-from app.models import AdminUser, Department, CertificateType, Certificate
+from app.models import AdminUser, Department, CertificateType, Certificate, User
 from app.utils.rsa_utils import get_rsa_utils
-from app.utils.admin_permission import super_admin_required
+from app.utils.admin_permission import super_admin_required, admin_required
+from app.utils.permission import get_admin_accessible_query
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
@@ -665,4 +666,92 @@ def delete_department(dept_id):
         db.session.rollback()
         return jsonify({'error': f'删除部门失败: {str(e)}'}), 500
 
+
+@admin_bp.route('/dashboard/stats', methods=['GET'])
+@admin_required
+def get_dashboard_stats():
+    """
+    获取仪表盘统计数据（管理员权限）
+    根据管理员权限返回对应的统计数据：
+    - 超级管理员：返回所有学生和部门的统计
+    - 普通管理员：只返回其管理的部门的学生统计
+    
+    返回: {
+        "code": 200,
+        "data": {
+            "total_students": 100,
+            "total_departments": 10,
+            "process_stats": {
+                "preliminary": {0: 10, 1: 80, 2: 10},
+                "medical": {0: 20, 1: 70, 2: 10},
+                "political": {0: 30, 1: 60, 2: 10},
+                "admission": {0: 40, 1: 50, 2: 10}
+            }
+        },
+        "message": "success"
+    }
+    注意：状态值转换为整数：pending(0), qualified(1), unqualified(2)
+    """
+    try:
+        admin_id = get_jwt_identity()
+        admin = AdminUser.query.get(admin_id)
+        
+        if not admin:
+            return jsonify({
+                'code': 404,
+                'message': '管理员不存在'
+            }), 404
+        
+        # 获取有权限访问的学生查询（已根据管理员权限过滤）
+        students_query = get_admin_accessible_query(User, admin_id)
+        
+        # 统计总学生数（基于权限）
+        total_students = students_query.count()
+        
+        # 统计总部门数（根据管理员权限）
+        if admin.role == AdminUser.ROLE_SUPER:
+            # 超级管理员可以看到所有部门
+            total_departments = Department.query.count()
+        else:
+            # 普通管理员只能看到自己管理的部门
+            total_departments = admin.managed_departments.count()
+        
+        # 统计四个阶段的状态分布（基于有权限的学生）
+        # 状态值映射：'pending' -> 0, 'qualified' -> 1, 'unqualified' -> 2
+        process_stats = {}
+        
+        # 四个阶段字段
+        stages = {
+            'preliminary': User.preliminary_status,
+            'medical': User.medical_status,
+            'political': User.political_status,
+            'admission': User.admission_status
+        }
+        
+        for stage_name, stage_field in stages.items():
+            # 基于有权限的学生查询，统计各状态的人数
+            pending_count = students_query.filter(stage_field == 'pending').count()
+            qualified_count = students_query.filter(stage_field == 'qualified').count()
+            unqualified_count = students_query.filter(stage_field == 'unqualified').count()
+            
+            process_stats[stage_name] = {
+                0: pending_count,      # 进行中(0)
+                1: qualified_count,    # 通过(1)
+                2: unqualified_count   # 不通过(2)
+            }
+        
+        return jsonify({
+            'code': 200,
+            'data': {
+                'total_students': total_students,
+                'total_departments': total_departments,
+                'process_stats': process_stats
+            },
+            'message': 'success'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'code': 500,
+            'message': f'获取统计数据失败: {str(e)}'
+        }), 500
 
