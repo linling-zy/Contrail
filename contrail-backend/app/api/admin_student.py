@@ -2,6 +2,10 @@
 管理员学生管理 API
 提供学生列表查询、状态更新、批量注册等功能
 需要管理员权限，普通管理员只能管理自己部门的学生
+
+依赖项：
+- pandas: 用于解析 Excel 文件（pip install pandas openpyxl）
+- openpyxl: pandas 读取 Excel 文件所需的引擎（pip install openpyxl）
 """
 import io
 import os
@@ -16,8 +20,16 @@ from app.extensions import db
 from app.models import User, AdminUser, Department, ScoreLog, Comment, Certificate
 from app.utils.permission import get_admin_accessible_query
 from app.utils.rsa_utils import get_rsa_utils
+from app.utils.admin_permission import admin_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from docxtpl import DocxTemplate
+
+# 尝试导入 pandas，如果未安装会抛出 ImportError
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
 
 
 # 状态枚举值
@@ -254,18 +266,79 @@ def list_students():
         - per_page: 每页数量（默认20）
         - filter: 筛选类型（name/student_id/class_name）
         - keyword: 筛选关键词
+        - department_id: 按班级/部门ID过滤（可选）
+        - status_stage: 按阶段状态过滤，可选值：preliminary/medical/political/admission（可选）
+        - status_value: 按状态值过滤，可选值：pending/qualified/unqualified（可选，需配合status_stage使用）
     返回: { "total": n, "page": 1, "per_page": 20, "pages": n, "items": [...] }
+    
+    注意：
+    - 权限控制：普通管理员只能查询其管理的部门下的学生（已通过get_admin_accessible_query实现）
+    - department_id过滤会进一步限制在指定部门，但必须确保该部门在管理员权限范围内
     """
     admin_id = get_jwt_identity()
+    admin = AdminUser.query.get(admin_id)
+    
+    if not admin:
+        return jsonify({'error': '管理员不存在'}), 404
+    
+    # 获取查询参数
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     filter_type = request.args.get('filter')  # name/student_id/class_name
     keyword = request.args.get('keyword', '').strip()
+    department_id = request.args.get('department_id', type=int)  # 部门ID过滤
+    status_stage = request.args.get('status_stage')  # 阶段名称
+    status_value = request.args.get('status_value')  # 状态值
+    
+    # 参数验证
+    if page < 1:
+        page = 1
+    if per_page < 1 or per_page > 100:
+        per_page = 20
     
     # 获取基础查询（已根据权限过滤）
     query = get_admin_accessible_query(User, admin_id)
     
-    # 应用筛选条件
+    # 部门ID过滤
+    if department_id is not None:
+        # 检查管理员是否有权限访问该部门
+        if admin.role != AdminUser.ROLE_SUPER:
+            # 普通管理员需要检查该部门是否在其管理范围内
+            managed_dept_ids = [dept.id for dept in admin.managed_departments.all()]
+            if department_id not in managed_dept_ids:
+                return jsonify({'error': '无权访问该部门'}), 403
+        
+        # 验证部门是否存在
+        department = Department.query.get(department_id)
+        if not department:
+            return jsonify({'error': '部门不存在'}), 404
+        
+        query = query.filter(User.department_id == department_id)
+    
+    # 阶段状态过滤
+    if status_stage:
+        if status_stage not in VALID_STAGES:
+            return jsonify({
+                'error': f'无效的阶段名称: {status_stage}，支持的值: {", ".join(VALID_STAGES)}'
+            }), 400
+        
+        if status_value:
+            if status_value not in VALID_STATUSES:
+                return jsonify({
+                    'error': f'无效的状态值: {status_value}，支持的值: {", ".join(VALID_STATUSES)}'
+                }), 400
+            
+            # 根据阶段和状态值过滤
+            if status_stage == 'preliminary':
+                query = query.filter(User.preliminary_status == status_value)
+            elif status_stage == 'medical':
+                query = query.filter(User.medical_status == status_value)
+            elif status_stage == 'political':
+                query = query.filter(User.political_status == status_value)
+            elif status_stage == 'admission':
+                query = query.filter(User.admission_status == status_value)
+    
+    # 关键词搜索（保留原有功能）
     if filter_type and keyword:
         if filter_type == 'name':
             # 按姓名筛选
@@ -908,3 +981,528 @@ def batch_register():
             'failed': failed_list + [{'index': item['index'], 'id_card_no': item['user']['id_card_no'], 'error': '数据库提交失败'} for item in success_list]
         }), 500
 
+
+@admin_bp.route('/students/<int:student_id>/score-logs', methods=['GET'])
+@admin_required
+def get_student_score_logs(student_id):
+    """
+    获取学生积分流水记录（管理员权限）
+    查询参数:
+        - page: 页码（默认1）
+        - limit: 每页数量（默认20）
+        - type: 类型过滤（1-人工调整, 2-系统自动）
+    返回: {
+        "code": 200,
+        "data": {
+            "items": [...],
+            "total": 100
+        },
+        "message": "success"
+    }
+    """
+    admin_id = get_jwt_identity()
+    
+    # 检查权限
+    has_access, student = check_admin_access_to_student(admin_id, student_id)
+    
+    if not student:
+        return jsonify({'code': 404, 'message': '学生不存在'}), 404
+    
+    if not has_access:
+        return jsonify({'code': 403, 'message': '无权访问该学生信息'}), 403
+    
+    # 获取查询参数
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 20, type=int)
+    type_filter = request.args.get('type', type=int)  # 1-人工, 2-系统
+    
+    # 参数验证
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 100:
+        limit = 20
+    
+    # 构建查询
+    query = ScoreLog.query.filter_by(user_id=student_id)
+    
+    # 类型过滤
+    if type_filter is not None:
+        if type_filter == 1:
+            query = query.filter(ScoreLog.type == ScoreLog.TYPE_MANUAL)
+        elif type_filter == 2:
+            query = query.filter(ScoreLog.type == ScoreLog.TYPE_SYSTEM)
+        else:
+            return jsonify({'code': 400, 'message': '无效的类型参数，支持的值：1（人工调整）或 2（系统自动）'}), 400
+    
+    # 按创建时间倒序排列
+    query = query.order_by(ScoreLog.create_time.desc())
+    
+    # 分页查询
+    pagination = query.paginate(
+        page=page,
+        per_page=limit,
+        error_out=False
+    )
+    
+    # 为了计算 old_score 和 new_score，需要获取所有记录（按时间正序）
+    # 注意：即使使用了类型过滤，old_score 的计算也应该基于所有记录，而不是只考虑过滤后的记录
+    # 这样才能保证 old_score 的准确性（反映该记录发生前的实际总分）
+    
+    # 获取基础分
+    base_score = student.base_score
+    
+    # 获取所有记录（用于计算分数，按时间正序，不考虑类型过滤）
+    all_logs = ScoreLog.query.filter_by(user_id=student_id)\
+        .order_by(ScoreLog.create_time.asc()).all()
+    
+    # 构建一个字典，key为log_id，value为该记录之前的累计分数
+    score_before_log = {}
+    current_score = base_score
+    for log in all_logs:
+        score_before_log[log.id] = current_score
+        current_score += log.delta
+    
+    # 构建返回数据
+    items = []
+    for log in pagination.items:
+        # 计算变动前后的分数
+        old_score = score_before_log.get(log.id, base_score)
+        new_score = old_score + log.delta
+        
+        # 类型转换：'manual' -> 1, 'system' -> 2
+        type_value = 1 if log.type == ScoreLog.TYPE_MANUAL else 2
+        
+        # 操作人姓名：如果是系统操作，返回"系统"；如果是人工操作，由于没有operator_id字段，返回"管理员"
+        operator_name = "系统" if log.type == ScoreLog.TYPE_SYSTEM else "管理员"
+        
+        items.append({
+            'id': log.id,
+            'old_score': old_score,
+            'new_score': new_score,
+            'change_amount': log.delta,
+            'reason': log.reason or '',
+            'type': type_value,
+            'create_time': log.create_time.isoformat() if log.create_time else None,
+            'operator_name': operator_name
+        })
+    
+    return jsonify({
+        'code': 200,
+        'data': {
+            'items': items,
+            'total': pagination.total
+        },
+        'message': 'success'
+    }), 200
+
+
+@admin_bp.route('/students/<int:student_id>/archive', methods=['PUT'])
+@admin_required
+def update_student_archive(student_id):
+    """
+    一次性更新学生档案完整信息（管理员权限）
+    包含：基本资料、四阶段进度、教师评价
+    
+    请求体: {
+        "base_info": {
+            "name": "张三",
+            "student_id": "2023001",
+            "department_id": 1,
+            "base_score": 80
+            // 其他可更新字段...
+        },
+        "process_status": {
+            "preliminary": "qualified",  // preliminary/medical/political/admission
+            "medical": "pending",
+            "political": "unqualified",
+            "admission": "pending"
+        },
+        "new_comment": "该生在校期间表现优秀..."  // 可选，如果有内容则新增评语
+    }
+    返回: {
+        "code": 200,
+        "message": "档案更新成功"
+    }
+    
+    注意：
+    - 所有更新在一个事务中完成，确保原子性
+    - 四个阶段状态字段直接更新到 User 表中（不存在独立的 StudentProcess 表）
+    - 如果 new_comment 不为空，会新增一条 Comment 记录，关联当前管理员
+    """
+    admin_id = get_jwt_identity()
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'code': 400, 'message': '请求体不能为空'}), 400
+    
+    # 检查权限
+    has_access, student = check_admin_access_to_student(admin_id, student_id)
+    
+    if not student:
+        return jsonify({'code': 404, 'message': '学生不存在'}), 404
+    
+    if not has_access:
+        return jsonify({'code': 403, 'message': '无权操作该学生'}), 403
+    
+    # 获取管理员信息（用于评语作者）
+    admin = AdminUser.query.get(admin_id)
+    if not admin:
+        return jsonify({'code': 404, 'message': '管理员不存在'}), 404
+    
+    # 开始事务
+    try:
+        # 1. 更新学生基本信息
+        base_info = data.get('base_info', {})
+        if base_info:
+            # 可更新的基础字段
+            if 'name' in base_info:
+                student.name = base_info['name']
+            if 'student_id' in base_info:
+                # 学号唯一性检查（如果修改了学号）
+                new_student_id = base_info['student_id']
+                if new_student_id and new_student_id != student.student_id:
+                    # 检查新学号是否已被其他学生使用
+                    existing_user = User.query.filter_by(student_id=new_student_id).first()
+                    if existing_user and existing_user.id != student_id:
+                        return jsonify({'code': 400, 'message': f'学号 {new_student_id} 已被其他学生使用'}), 400
+                student.student_id = new_student_id
+            if 'department_id' in base_info:
+                dept_id = base_info['department_id']
+                # 验证部门是否存在
+                if dept_id is not None:
+                    department = Department.query.get(dept_id)
+                    if not department:
+                        return jsonify({'code': 404, 'message': f'部门ID {dept_id} 不存在'}), 404
+                    # 普通管理员只能将学生分配到其管理的部门
+                    if admin.role != AdminUser.ROLE_SUPER:
+                        managed_dept_ids = [dept.id for dept in admin.managed_departments.all()]
+                        if dept_id not in managed_dept_ids:
+                            return jsonify({'code': 403, 'message': '无权将学生分配到该部门'}), 403
+                student.department_id = dept_id
+            if 'base_score' in base_info:
+                base_score = base_info['base_score']
+                if not isinstance(base_score, int):
+                    return jsonify({'code': 400, 'message': 'base_score 必须是整数'}), 400
+                student.base_score = base_score
+        
+        # 2. 更新四阶段状态（直接更新到 User 表的字段）
+        process_status = data.get('process_status', {})
+        if process_status:
+            # 验证并更新各阶段状态
+            for stage_name, status_value in process_status.items():
+                if stage_name not in VALID_STAGES:
+                    return jsonify({
+                        'code': 400,
+                        'message': f'无效的阶段名称: {stage_name}，支持的值: {", ".join(VALID_STAGES)}'
+                    }), 400
+                
+                if status_value not in VALID_STATUSES:
+                    return jsonify({
+                        'code': 400,
+                        'message': f'无效的状态值: {status_value}，支持的值: {", ".join(VALID_STATUSES)}'
+                    }), 400
+                
+                # 更新对应字段
+                if stage_name == 'preliminary':
+                    student.preliminary_status = status_value
+                elif stage_name == 'medical':
+                    student.medical_status = status_value
+                elif stage_name == 'political':
+                    student.political_status = status_value
+                elif stage_name == 'admission':
+                    student.admission_status = status_value
+        
+        # 3. 添加新评语（如果提供了 new_comment）
+        new_comment = data.get('new_comment', '').strip()
+        if new_comment:
+            comment = Comment(
+                user_id=student_id,
+                content=new_comment,
+                author=admin.name  # 使用管理员姓名作为作者
+            )
+            db.session.add(comment)
+        
+        # 提交事务（所有操作一起提交，确保原子性）
+        db.session.commit()
+        
+        return jsonify({
+            'code': 200,
+            'message': '档案更新成功'
+        }), 200
+        
+    except Exception as e:
+        # 发生异常时回滚事务
+        db.session.rollback()
+        return jsonify({
+            'code': 500,
+            'message': f'档案更新失败: {str(e)}'
+        }), 500
+
+
+@admin_bp.route('/students/import', methods=['POST'])
+@admin_required
+def import_students_from_excel():
+    """
+    从 Excel 文件批量导入学生（管理员权限）
+    
+    请求格式: multipart/form-data
+    字段名: file (Excel 文件)
+    
+    Excel 文件格式要求：
+    - 第一行为列名：学号、姓名、身份证号、班级名称
+    - 支持 .xlsx 和 .xls 格式
+    
+    逻辑：
+    - 如果学号在数据库中已存在，则跳过该行
+    - 如果班级名称在 Department 表中不存在，记录为错误
+    - 如果身份证号已存在，则跳过该行
+    - 普通管理员只能导入到其管理的部门
+    
+    返回: {
+        "code": 200,
+        "data": {
+            "success_count": 10,
+            "skip_count": 2,
+            "error_count": 1,
+            "errors": [
+                {"row": 3, "student_id": "2023001", "error": "学号已存在"},
+                {"row": 5, "class_name": "不存在的班级", "error": "班级不存在"}
+            ]
+        },
+        "message": "import completed"
+    }
+    
+    依赖项：
+    - pandas: pip install pandas
+    - openpyxl: pip install openpyxl (用于读取 .xlsx 文件)
+    """
+    if not PANDAS_AVAILABLE:
+        return jsonify({
+            'code': 500,
+            'message': 'pandas 未安装，请运行: pip install pandas openpyxl'
+        }), 500
+    
+    admin_id = get_jwt_identity()
+    admin = AdminUser.query.get(admin_id)
+    
+    if not admin:
+        return jsonify({'code': 404, 'message': '管理员不存在'}), 404
+    
+    # 检查文件是否上传
+    if 'file' not in request.files:
+        return jsonify({'code': 400, 'message': '未上传文件，请使用字段名 "file"'}), 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({'code': 400, 'message': '文件名为空'}), 400
+    
+    # 检查文件扩展名
+    filename = file.filename.lower()
+    if not (filename.endswith('.xlsx') or filename.endswith('.xls')):
+        return jsonify({'code': 400, 'message': '不支持的文件格式，仅支持 .xlsx 和 .xls 文件'}), 400
+    
+    # 获取管理员管理的部门列表（用于权限检查）
+    if admin.role == AdminUser.ROLE_SUPER:
+        managed_dept_ids = None  # 超级管理员可以访问所有部门
+    else:
+        managed_departments = admin.managed_departments.all()
+        managed_dept_ids = [dept.id for dept in managed_departments]
+        if not managed_dept_ids:
+            return jsonify({'code': 403, 'message': '您没有管理的部门，无法导入学生'}), 403
+    
+    # 读取 Excel 文件
+    try:
+        # 使用 pandas 读取 Excel
+        df = pd.read_excel(file, engine='openpyxl' if filename.endswith('.xlsx') else None)
+    except Exception as e:
+        return jsonify({
+            'code': 400,
+            'message': f'Excel 文件读取失败: {str(e)}'
+        }), 400
+    
+    # 检查必需的列
+    required_columns = ['学号', '姓名', '身份证号', '班级名称']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return jsonify({
+            'code': 400,
+            'message': f'Excel 文件缺少必需的列: {", ".join(missing_columns)}'
+        }), 400
+    
+    # 统计数据
+    success_count = 0
+    skip_count = 0
+    error_count = 0
+    errors = []
+    
+    # 批量查询已存在的学号和身份证号（优化性能）
+    existing_student_ids_query = User.query.with_entities(User.student_id).filter(
+        User.student_id.isnot(None),
+        User.student_id != ''
+    ).all()
+    existing_student_ids = {str(sid[0]) for sid in existing_student_ids_query if sid[0] and str(sid[0]).strip()}
+    
+    existing_id_cards_query = User.query.with_entities(User.id_card_no).all()
+    existing_id_cards = {str(card[0]) for card in existing_id_cards_query if card[0]}
+    
+    # 缓存部门名称到ID的映射（避免重复查询）
+    department_cache = {}
+    all_departments = Department.query.all()
+    for dept in all_departments:
+        if dept.class_name:
+            # 如果同一个班级名称有多个部门，取第一个
+            if dept.class_name not in department_cache:
+                department_cache[dept.class_name] = dept.id
+    
+    # 准备批量插入的数据
+    users_to_add = []
+    
+    # 遍历每一行数据
+    for index, row in df.iterrows():
+        row_num = index + 2  # Excel 行号（从2开始，因为第1行是列名）
+        
+        try:
+            # 提取数据（去除前后空格）
+            student_id = str(row['学号']).strip() if pd.notna(row['学号']) else ''
+            name = str(row['姓名']).strip() if pd.notna(row['姓名']) else ''
+            id_card_no = str(row['身份证号']).strip() if pd.notna(row['身份证号']) else ''
+            class_name = str(row['班级名称']).strip() if pd.notna(row['班级名称']) else ''
+            
+            # 基本验证
+            if not name:
+                errors.append({
+                    'row': row_num,
+                    'student_id': student_id,
+                    'error': '姓名为空'
+                })
+                error_count += 1
+                continue
+            
+            if not id_card_no:
+                errors.append({
+                    'row': row_num,
+                    'student_id': student_id,
+                    'error': '身份证号为空'
+                })
+                error_count += 1
+                continue
+            
+            # 身份证号格式验证
+            id_card_no = id_card_no.upper()  # 统一转为大写
+            if len(id_card_no) != 18:
+                errors.append({
+                    'row': row_num,
+                    'student_id': student_id,
+                    'id_card_no': id_card_no,
+                    'error': '身份证号必须为18位'
+                })
+                error_count += 1
+                continue
+            
+            if (not id_card_no[:17].isdigit()) or (not (id_card_no[17].isdigit() or id_card_no[17] == 'X')):
+                errors.append({
+                    'row': row_num,
+                    'student_id': student_id,
+                    'id_card_no': id_card_no,
+                    'error': '身份证号格式不正确'
+                })
+                error_count += 1
+                continue
+            
+            # 检查身份证号是否已存在
+            if id_card_no in existing_id_cards:
+                skip_count += 1
+                continue
+            
+            # 检查学号是否已存在（如果提供了学号）
+            if student_id and student_id in existing_student_ids:
+                skip_count += 1
+                continue
+            
+            # 查找部门
+            department_id = None
+            if class_name:
+                department_id = department_cache.get(class_name)
+                if not department_id:
+                    errors.append({
+                        'row': row_num,
+                        'student_id': student_id,
+                        'class_name': class_name,
+                        'error': f'班级名称 "{class_name}" 不存在'
+                    })
+                    error_count += 1
+                    continue
+                
+                # 权限检查：普通管理员只能导入到其管理的部门
+                if managed_dept_ids is not None and department_id not in managed_dept_ids:
+                    errors.append({
+                        'row': row_num,
+                        'student_id': student_id,
+                        'class_name': class_name,
+                        'error': f'无权将学生分配到班级 "{class_name}"'
+                    })
+                    error_count += 1
+                    continue
+            
+            # 学号格式验证（如果提供了学号）
+            if student_id:
+                if not student_id.isdigit():
+                    errors.append({
+                        'row': row_num,
+                        'student_id': student_id,
+                        'error': '学号必须为纯数字'
+                    })
+                    error_count += 1
+                    continue
+            
+            # 准备创建用户对象
+            user = User(
+                id_card_no=id_card_no,
+                student_id=student_id if student_id else None,
+                name=name,
+                department_id=department_id,
+                base_score=80  # 默认基础分
+            )
+            # 设置默认密码（使用身份证号后6位作为初始密码）
+            default_password = id_card_no[-6:]
+            user.set_password(default_password)
+            
+            users_to_add.append(user)
+            
+            # 更新已存在的集合（避免同一批数据中的重复）
+            if student_id:
+                existing_student_ids.add(student_id)
+            existing_id_cards.add(id_card_no)
+            
+        except Exception as e:
+            errors.append({
+                'row': row_num,
+                'error': f'处理失败: {str(e)}'
+            })
+            error_count += 1
+            continue
+    
+    # 批量插入数据库
+    if users_to_add:
+        try:
+            db.session.add_all(users_to_add)
+            db.session.commit()
+            success_count = len(users_to_add)
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({
+                'code': 500,
+                'message': f'批量导入失败: {str(e)}'
+            }), 500
+    
+    return jsonify({
+        'code': 200,
+        'data': {
+            'success_count': success_count,
+            'skip_count': skip_count,
+            'error_count': error_count,
+            'errors': errors[:100]  # 最多返回100条错误信息，避免响应过大
+        },
+        'message': 'import completed'
+    }), 200

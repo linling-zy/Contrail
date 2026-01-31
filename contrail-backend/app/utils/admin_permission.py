@@ -8,6 +8,28 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app.models import AdminUser
 
 
+def admin_required(f):
+    """
+    装饰器：要求当前用户必须是管理员（超级管理员或普通管理员）
+    使用方式：
+        @admin_bp.route('/some-route')
+        @admin_required
+        def some_function():
+            ...
+    """
+    @wraps(f)
+    @jwt_required()
+    def decorated_function(*args, **kwargs):
+        admin_id = get_jwt_identity()
+        admin = AdminUser.query.get(admin_id)
+        
+        if not admin:
+            return jsonify({'code': 404, 'message': '管理员不存在'}), 404
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def super_admin_required(f):
     """
     装饰器：要求当前用户必须是超级管理员
