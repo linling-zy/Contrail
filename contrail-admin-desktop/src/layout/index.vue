@@ -43,10 +43,11 @@ import { Sidebar, Navbar, AppMain } from './components'
 }
 
 .main-container {
-  min-height: 100%;
+  height: 100vh;
   transition: margin-left 0.28s;
   margin-left: 210px;
   width: calc(100% - 210px);
   position: relative;
+  overflow: hidden;
 }
 </style>

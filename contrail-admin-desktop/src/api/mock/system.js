@@ -139,6 +139,20 @@ export function getCertTypes() {
     return Promise.resolve({ code: 200, data: certTypes })
 }
 
+export function addCertType(data) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const newId = certTypes.length ? Math.max(...certTypes.map(c => c.id)) + 1 : 1
+            certTypes.push({
+                id: newId,
+                name: data.name,
+                required: data.required
+            })
+            resolve({ code: 200, message: '添加成功' })
+        }, 300)
+    })
+}
+
 // 模拟保存（针对扁平化结构简化）
 export function saveClassCerts(classId, certIds) {
     return new Promise(resolve => {

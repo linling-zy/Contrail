@@ -2,11 +2,15 @@
 RSA 加密工具模块
 提供 RSA 密钥对生成、公钥获取和密码解密功能
 """
+import logging
 import os
 import base64
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
+
+
+logger = logging.getLogger(__name__)
 
 
 class RSAUtils:
@@ -48,7 +52,7 @@ class RSAUtils:
                     )
                 return
             except Exception as e:
-                print(f"[RSA] 加载密钥失败，将重新生成: {str(e)}")
+                logger.warning(f"[RSA] 加载密钥失败，将重新生成: {str(e)}")
         
         # 生成新密钥对
         self._generate_keys()
@@ -80,7 +84,7 @@ class RSAUtils:
         with open(self.public_key_path, 'wb') as f:
             f.write(public_pem)
         
-        print(f"[RSA] 已生成新的密钥对: {self.private_key_path}, {self.public_key_path}")
+        logger.info(f"[RSA] 已生成新的密钥对: {self.private_key_path}, {self.public_key_path}")
     
     def get_public_key_pem(self):
         """

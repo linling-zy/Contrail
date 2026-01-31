@@ -11,6 +11,7 @@ from app.models import AdminUser, Department, CertificateType, Certificate
 from app.utils.rsa_utils import get_rsa_utils
 from app.utils.admin_permission import super_admin_required
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime
 
 
 @admin_bp.route('/admins', methods=['POST'])
@@ -472,4 +473,196 @@ def bind_certificate_types_to_department(dept_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'绑定证书类型失败: {str(e)}'}), 500
+
+
+# ==================== 部门管理 ====================
+
+@admin_bp.route('/departments', methods=['POST'])
+@super_admin_required
+def create_department():
+    """
+    创建部门（仅限超级管理员）
+    请求体: {
+        "college": "计算机学院",
+        "grade": "2023级",
+        "major": "软件工程",
+        "class_name": "2301班",
+        "bonus_start_date": "2024-01-01"  // 可选，格式 YYYY-MM-DD
+    }
+    返回: { "department": {...}, "message": "创建成功" }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': '请求体不能为空'}), 400
+    
+    college = data.get('college', '').strip() or None
+    grade = data.get('grade', '').strip() or None
+    major = data.get('major', '').strip() or None
+    class_name = data.get('class_name', '').strip() or None
+    bonus_start_date_str = data.get('bonus_start_date', '').strip() or None
+    
+    # 至少需要有一个字段不为空
+    if not any([college, grade, major, class_name]):
+        return jsonify({'error': '至少需要填写一个部门信息字段（学院/年级/专业/班级）'}), 400
+    
+    # 解析 bonus_start_date
+    bonus_start_date = None
+    if bonus_start_date_str:
+        try:
+            bonus_start_date = datetime.strptime(bonus_start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'bonus_start_date 格式错误，应为 YYYY-MM-DD'}), 400
+    
+    # 创建部门
+    department = Department(
+        college=college,
+        grade=grade,
+        major=major,
+        class_name=class_name,
+        bonus_start_date=bonus_start_date
+    )
+    
+    try:
+        db.session.add(department)
+        db.session.commit()
+        return jsonify({
+            'message': '部门创建成功',
+            'department': department.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'创建部门失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/departments', methods=['GET'])
+@jwt_required()
+def list_departments():
+    """
+    获取部门列表（所有管理员都可以查看）
+    查询参数: 
+        - page: 页码（默认1）
+        - per_page: 每页数量（默认20）
+    返回: { "total": n, "page": 1, "per_page": 20, "pages": n, "items": [...] }
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    # 分页查询
+    pagination = Department.query.order_by(Department.id.desc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+    
+    return jsonify({
+        'total': pagination.total,
+        'page': page,
+        'per_page': per_page,
+        'pages': pagination.pages,
+        'items': [dept.to_dict() for dept in pagination.items]
+    }), 200
+
+
+@admin_bp.route('/departments/<int:dept_id>', methods=['GET'])
+@jwt_required()
+def get_department(dept_id):
+    """
+    获取部门详情（所有管理员都可以查看）
+    返回: { "department": {...} }
+    """
+    department = Department.query.get(dept_id)
+    if not department:
+        return jsonify({'error': '部门不存在'}), 404
+    
+    return jsonify({
+        'department': department.to_dict()
+    }), 200
+
+
+@admin_bp.route('/departments/<int:dept_id>', methods=['PUT'])
+@super_admin_required
+def update_department(dept_id):
+    """
+    更新部门信息（仅限超级管理员）
+    请求体: {
+        "college": "计算机学院",  // 可选
+        "grade": "2023级",  // 可选
+        "major": "软件工程",  // 可选
+        "class_name": "2301班",  // 可选
+        "bonus_start_date": "2024-01-01"  // 可选，格式 YYYY-MM-DD，传 null 可清空
+    }
+    返回: { "department": {...}, "message": "更新成功" }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': '请求体不能为空'}), 400
+    
+    department = Department.query.get(dept_id)
+    if not department:
+        return jsonify({'error': '部门不存在'}), 404
+    
+    # 更新字段（如果提供了）
+    if 'college' in data:
+        department.college = data.get('college', '').strip() or None
+    if 'grade' in data:
+        department.grade = data.get('grade', '').strip() or None
+    if 'major' in data:
+        department.major = data.get('major', '').strip() or None
+    if 'class_name' in data:
+        department.class_name = data.get('class_name', '').strip() or None
+    
+    # 更新 bonus_start_date
+    if 'bonus_start_date' in data:
+        bonus_start_date_str = data.get('bonus_start_date')
+        if bonus_start_date_str is None:
+            # 传 null 表示清空
+            department.bonus_start_date = None
+        elif isinstance(bonus_start_date_str, str) and bonus_start_date_str.strip():
+            try:
+                department.bonus_start_date = datetime.strptime(bonus_start_date_str.strip(), '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'bonus_start_date 格式错误，应为 YYYY-MM-DD'}), 400
+        else:
+            return jsonify({'error': 'bonus_start_date 格式错误'}), 400
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': '部门信息更新成功',
+            'department': department.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'更新部门失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/departments/<int:dept_id>', methods=['DELETE'])
+@super_admin_required
+def delete_department(dept_id):
+    """
+    删除部门（仅限超级管理员）
+    如果部门下有学生，将返回错误
+    返回: { "message": "删除成功" }
+    """
+    department = Department.query.get(dept_id)
+    if not department:
+        return jsonify({'error': '部门不存在'}), 404
+    
+    # 检查是否有学生绑定到该部门
+    students_count = department.users.count()
+    if students_count > 0:
+        return jsonify({
+            'error': f'无法删除：该部门下还有 {students_count} 个学生'
+        }), 400
+    
+    try:
+        db.session.delete(department)
+        db.session.commit()
+        return jsonify({'message': '部门删除成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'删除部门失败: {str(e)}'}), 500
+
 

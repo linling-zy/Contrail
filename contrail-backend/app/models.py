@@ -2,7 +2,7 @@
 数据库模型定义
 包含 User, ScoreLog, Certificate, Comment, CertificateType, AdminUser 等核心模型
 """
-from datetime import datetime
+from datetime import datetime, date
 from app.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -21,6 +21,7 @@ class Department(db.Model):
     grade = db.Column(db.String(20), nullable=True, index=True, comment='年级')
     major = db.Column(db.String(100), nullable=True, index=True, comment='专业')
     class_name = db.Column(db.String(50), nullable=True, index=True, comment='班级')
+    bonus_start_date = db.Column(db.Date, nullable=True, comment='自动加分计算的基准起始日期（为空时使用系统默认配置）')
     create_time = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
 
     # 关系：一个部门有多个用户
@@ -41,6 +42,7 @@ class Department(db.Model):
             'grade': self.grade,
             'major': self.major,
             'class_name': self.class_name,
+            'bonus_start_date': self.bonus_start_date.isoformat() if self.bonus_start_date else None,
         }
 
     def __repr__(self):
@@ -348,4 +350,72 @@ class AdminUser(db.Model):
     
     def __repr__(self):
         return f'<AdminUser {self.username}: {self.name} (role={self.role})>'
+
+
+class SystemConfig(db.Model):
+    """
+    系统配置模型
+    存储全局系统配置信息，如默认的自动加分起始日期等
+    """
+    __tablename__ = 'system_configs'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment='配置ID，主键')
+    key = db.Column(db.String(100), unique=True, nullable=False, index=True, comment='配置键（唯一）')
+    value = db.Column(db.String(500), nullable=True, comment='配置值（字符串格式）')
+    description = db.Column(db.String(200), nullable=True, comment='配置说明')
+    create_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, comment='创建时间')
+    update_time = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, comment='更新时间')
+    
+    def to_dict(self):
+        """转换为字典（用于 JSON 序列化）"""
+        return {
+            'id': self.id,
+            'key': self.key,
+            'value': self.value,
+            'description': self.description,
+            'create_time': self.create_time.isoformat() if self.create_time else None,
+            'update_time': self.update_time.isoformat() if self.update_time else None,
+        }
+    
+    @staticmethod
+    def get_config(key, default=None):
+        """
+        获取配置值
+        
+        Args:
+            key: 配置键
+            default: 默认值（如果配置不存在）
+        
+        Returns:
+            配置值（字符串）或默认值
+        """
+        config = SystemConfig.query.filter_by(key=key).first()
+        return config.value if config else default
+    
+    @staticmethod
+    def set_config(key, value, description=None):
+        """
+        设置配置值（如果不存在则创建，存在则更新）
+        
+        Args:
+            key: 配置键
+            value: 配置值
+            description: 配置说明（可选）
+        
+        Returns:
+            SystemConfig 实例
+        """
+        config = SystemConfig.query.filter_by(key=key).first()
+        if config:
+            config.value = value
+            if description is not None:
+                config.description = description
+        else:
+            config = SystemConfig(key=key, value=value, description=description)
+            db.session.add(config)
+        db.session.commit()
+        return config
+    
+    def __repr__(self):
+        return f'<SystemConfig {self.key}={self.value}>'
 
