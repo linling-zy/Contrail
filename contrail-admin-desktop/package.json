@@ -9,9 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vueuse/core": "^14.2.0",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.1",
+    "jsencrypt": "^3.3.2",
+    "particles.vue3": "^2.12.0",
     "pinia": "^3.0.4",
+    "tsparticles-slim": "^2.12.0",
     "vue": "^3.5.24",
     "vue-router": "^4.6.4"
   },

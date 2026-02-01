@@ -10,6 +10,12 @@ const routes = [
         hidden: true
     },
     {
+        path: '/setup',
+        name: 'Setup',
+        component: () => import('@/views/setup/index.vue'),
+        hidden: true
+    },
+    {
         path: '/',
         component: Layout,
         redirect: '/dashboard',
@@ -101,7 +107,45 @@ const router = createRouter({
     routes
 })
 
-router.beforeEach((to, from, next) => {
+import { getSystemInitStatus } from '@/api/system'
+
+let hasCheckedInit = false
+let isInitialized = true // 默认假设已初始化，避免阻塞，等待 api 确认
+
+router.beforeEach(async (to, from, next) => {
+    // 1. 系统初始化检查 (最高优先级)
+    if (!hasCheckedInit) {
+        try {
+            const res = await getSystemInitStatus()
+            // 后端返回 { initialized: boolean }
+            // 注意：需根据实际返回结构调整，假设直接返回对象
+            isInitialized = res.initialized !== false // 如果明确为 false 才算未初始化
+            hasCheckedInit = true
+        } catch (error) {
+            console.error('Failed to check system status:', error)
+            // 请求失败时，假设系统未初始化，允许访问 setup 页面
+            // 这样即使后端未启动或 CORS 问题，用户仍可以访问初始化页面
+            isInitialized = false
+            hasCheckedInit = true
+        }
+    }
+
+    if (!isInitialized) {
+        if (to.path === '/setup') {
+            next()
+        } else {
+            next('/setup')
+        }
+        return
+    } else {
+        // 已初始化
+        if (to.path === '/setup') {
+            next('/login')
+            return
+        }
+    }
+
+    // 2. 原有的 Token 校验逻辑
     const userStore = useUserStore()
     const token = userStore.token
 
@@ -113,17 +157,36 @@ router.beforeEach((to, from, next) => {
         }
     } else {
         if (token) {
-            // 简单的角色检查
-            // 实际项目中应在获取用户信息后再生成路由，这里做简单拦截
-            if (to.meta.roles) {
-                const hasRole = userStore.userInfo && to.meta.roles.includes(userStore.userInfo.role)
+            // 检查路由权限（包括父路由的权限）
+            const checkRouteRoles = (route) => {
+                // 检查当前路由的权限
+                if (route.meta && route.meta.roles) {
+                    return route.meta.roles
+                }
+                // 检查父路由的权限（递归查找）
+                if (route.matched && route.matched.length > 1) {
+                    for (let i = route.matched.length - 1; i >= 0; i--) {
+                        const matchedRoute = route.matched[i]
+                        if (matchedRoute.meta && matchedRoute.meta.roles) {
+                            return matchedRoute.meta.roles
+                        }
+                    }
+                }
+                return null
+            }
+            
+            const requiredRoles = checkRouteRoles(to)
+            
+            if (requiredRoles) {
+                const hasRole = userStore.userInfo && requiredRoles.includes(userStore.userInfo.role)
                 if (hasRole) {
                     next()
                 } else {
                     try {
                         // 如果用户信息尚未加载（刷新页面情况），可能需要重新获取（此处简化依赖localStorage/store状态）
                         if (userStore.userInfo) {
-                            next({ path: '/404' }) // 或者其他无权限页面
+                            // 用户有信息但没有权限，跳转到仪表盘
+                            next({ path: '/dashboard' })
                         } else {
                             // 尝试恢复用户信息或跳转登录
                             userStore.logout()

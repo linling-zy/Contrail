@@ -17,7 +17,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 20px;
-  background-color: #f0f2f5;
+  background-color: var(--el-bg-color-page);
+  transition: background-color 0.3s;
 }
 
 .fade-transform-leave-active,
