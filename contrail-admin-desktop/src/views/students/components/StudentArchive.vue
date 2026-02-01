@@ -81,6 +81,7 @@
          <div class="score-display">
             <div class="score-value">{{ studentData?.totalScore || 0 }}</div>
             <div class="score-label">当前总积分</div>
+            <el-button type="primary" link size="small" @click="openScoreDialog" style="margin-top: 8px;">调整积分</el-button>
          </div>
          <el-divider class="divider-sm" />
          <div class="rank-info">
@@ -128,12 +129,47 @@
              </div>
           </div>
       </div>
+
+      <!-- 积分调整弹窗 -->
+      <el-dialog
+        v-model="scoreDialogVisible"
+        title="调整积分"
+        width="400px"
+        append-to-body
+        destroy-on-close
+      >
+        <el-form :model="scoreForm" :rules="scoreRules" ref="scoreFormRef" label-width="80px">
+           <el-form-item label="调整类型">
+              <el-radio-group v-model="scoreForm.type">
+                 <el-radio-button label="add">加分</el-radio-button>
+                 <el-radio-button label="deduct">扣分</el-radio-button>
+              </el-radio-group>
+           </el-form-item>
+           <el-form-item label="分值" prop="value">
+              <el-input-number v-model="scoreForm.value" :min="1" :step="1" style="width: 100%" />
+           </el-form-item>
+           <el-form-item label="原因" prop="reason">
+              <el-input
+                v-model="scoreForm.reason"
+                type="textarea"
+                rows="3"
+                placeholder="请输入调整原因（必填）"
+              />
+           </el-form-item>
+        </el-form>
+        <template #footer>
+           <span class="dialog-footer">
+              <el-button @click="scoreDialogVisible = false">取消</el-button>
+              <el-button type="primary" :loading="scoreAdjusting" @click="confirmScoreAdjust">确定</el-button>
+           </span>
+        </template>
+      </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, watch, computed } from 'vue'
-import { updateStudentProfile } from '@/api/mock/student'
+import { updateStudentProfile, adjustStudentScore } from '@/api/student'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 
@@ -162,6 +198,19 @@ const profileForm = reactive({
     idCard: ''
 })
 
+const scoreDialogVisible = ref(false)
+const scoreAdjusting = ref(false)
+const scoreFormRef = ref(null)
+const scoreForm = reactive({
+   type: 'add',
+   value: 0,
+   reason: ''
+})
+const scoreRules = {
+   value: [{ required: true, message: '请输入分值', trigger: 'blur' }],
+   reason: [{ required: true, message: '请输入原因', trigger: 'blur' }]
+}
+
 const evaluation = ref('')
 const certificates = ref([])
 const isExpanded = ref(false)
@@ -181,12 +230,34 @@ const statusConfigs = {
 // Watchers
 watch(() => props.studentData, (newVal) => {
   if (newVal) {
-     if (newVal.status) Object.assign(formStatus, newVal.status)
+     // 处理状态数据（兼容后端返回的格式，将 'unqualified' 转换为前端的 'failed'）
+     const mapStatus = (status) => {
+       if (status === 'unqualified') return 'failed'
+       return status || 'pending'
+     }
+     
+     if (newVal.status) {
+       Object.assign(formStatus, {
+         preliminary: mapStatus(newVal.status.preliminary),
+         medical: mapStatus(newVal.status.medical),
+         political: mapStatus(newVal.status.political),
+         admission: mapStatus(newVal.status.admission)
+       })
+     } else if (newVal.process_status) {
+       // 如果后端返回的是 process_status 格式
+       Object.assign(formStatus, {
+         preliminary: mapStatus(newVal.process_status.preliminary),
+         medical: mapStatus(newVal.process_status.medical),
+         political: mapStatus(newVal.process_status.political),
+         admission: mapStatus(newVal.process_status.admission)
+       })
+     }
+     
      evaluation.value = newVal.teacherEvaluation || ''
      certificates.value = newVal.certificates || []
      profileForm.name = newVal.name || ''
-     profileForm.studentNo = newVal.studentNo || ''
-     profileForm.idCard = newVal.idCard || ''
+     profileForm.studentNo = newVal.studentNo || newVal.student_id || ''
+     profileForm.idCard = newVal.idCard || newVal.id_card_no || ''
   }
 }, { immediate: true, deep: true })
 
@@ -194,37 +265,102 @@ const handleSave = async () => {
   if (!props.studentData?.id) return
   saving.value = true
   try {
-    await updateStudentProfile(Number(props.studentData.id), {
-        status: formStatus,
-        teacherEvaluation: evaluation.value,
-        ...profileForm
-    })
-    ElMessage.success('档案已保存')
-    emit('saved')
+    // 构造符合后端要求的 JSON 对象
+    const requestData = {
+      // 基本信息
+      base_info: {
+        name: profileForm.name || undefined,
+        student_id: profileForm.studentNo || undefined
+        // department_id 和 base_score 如果需要更新，可以从 studentData 中获取或添加输入框
+      },
+      // 阶段状态（将前端的 'failed' 转换为后端的 'unqualified'）
+      process_status: {
+        preliminary: formStatus.preliminary === 'failed' ? 'unqualified' : (formStatus.preliminary || undefined),
+        medical: formStatus.medical === 'failed' ? 'unqualified' : (formStatus.medical || undefined),
+        political: formStatus.political === 'failed' ? 'unqualified' : (formStatus.political || undefined),
+        admission: formStatus.admission === 'failed' ? 'unqualified' : (formStatus.admission || undefined)
+      },
+      // 新评语（如果有内容）
+      new_comment: evaluation.value && evaluation.value.trim() ? evaluation.value.trim() : undefined
+    }
+    
+    // 移除 undefined 的字段，避免发送空值
+    if (!requestData.base_info.name) delete requestData.base_info.name
+    if (!requestData.base_info.student_id) delete requestData.base_info.student_id
+    if (Object.keys(requestData.base_info).length === 0) {
+      delete requestData.base_info
+    }
+    if (!requestData.new_comment) {
+      delete requestData.new_comment
+    }
+    
+    const res = await updateStudentProfile(Number(props.studentData.id), requestData)
+    
+    if (res.code === 200) {
+      ElMessage.success(res.message || '档案已保存')
+      emit('saved')
+    } else {
+      ElMessage.error(res.message || '保存失败')
+    }
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('保存失败:', error)
+    ElMessage.error(error.message || '保存失败，请稍后重试')
   } finally {
     saving.value = false
   }
 }
 
+// Score Adjustment Methods
+const openScoreDialog = () => {
+   scoreForm.type = 'add'
+   scoreForm.value = 5 // Default suggestion
+   scoreForm.reason = ''
+   scoreDialogVisible.value = true
+}
+
+const confirmScoreAdjust = async () => {
+   if (!scoreFormRef.value) return
+   await scoreFormRef.value.validate(async (valid) => {
+      if (valid) {
+         scoreAdjusting.value = true
+         try {
+            const delta = scoreForm.type === 'add' ? scoreForm.value : -scoreForm.value
+            const res = await adjustStudentScore(props.studentData.id, delta, scoreForm.reason)
+            
+            if (res.message || res.score_log) {
+               ElMessage.success(res.message || '积分调整成功')
+               scoreDialogVisible.value = false
+               emit('saved') // Trigger refresh
+            } else {
+               ElMessage.error('调整失败')
+            }
+         } catch (error) {
+            console.error('积分调整失败:', error)
+            ElMessage.error(error.message || '积分调整失败')
+         } finally {
+            scoreAdjusting.value = false
+         }
+      }
+   })
+}
+
 // Helpers
 const getStatusType = (val) => {
-  const map = { qualified: 'success', failed: 'danger', pending: 'info' }
+  const map = { qualified: 'success', unqualified: 'danger', failed: 'danger', pending: 'info' }
   return map[val] || 'info'
 }
 
 const getStatusText = (val) => {
-  const map = { qualified: '合格', failed: '不合格', pending: '待定' }
+  const map = { qualified: '合格', unqualified: '不合格', failed: '不合格', pending: '待定' }
   return map[val] || '待定'
 }
 </script>
 
 <style scoped lang="scss">
-$border-color: #e4e7ed;
-$text-main: #303133;
-$text-regular: #606266;
-$bg-white: #ffffff;
+$border-color: var(--el-border-color-light);
+$text-main: var(--el-text-color-primary);
+$text-regular: var(--el-text-color-regular);
+$bg-white: var(--el-bg-color);
 
 .student-profile-grid {
    display: grid;
@@ -285,9 +421,9 @@ $bg-white: #ffffff;
    }
    
    .header-form {
-      background: #f9fafc;
+      background: var(--el-fill-color-lighter);
       padding: 16px;
-      border: 1px solid #EBEEF5;
+      border: 1px solid var(--el-border-color-lighter);
       
       .compact-form {
          margin-bottom: 0;
@@ -307,14 +443,14 @@ $bg-white: #ffffff;
       th {
          text-align: left;
          font-size: 12px;
-         color: #909399;
+         color: var(--el-text-color-secondary);
          padding-bottom: 8px;
-         border-bottom: 1px solid #ebeef5;
+         border-bottom: 1px solid var(--el-border-color-lighter);
       }
       
       td {
          padding: 12px 0;
-         border-bottom: 1px solid #f2f6fc;
+         border-bottom: 1px solid var(--el-border-color-lighter);
          vertical-align: middle;
       }
       
@@ -368,7 +504,7 @@ $bg-white: #ffffff;
       flex: 1;
       :deep(.el-textarea__inner) {
          border-radius: 2px;
-         background: #fcfcfc;
+         background: var(--el-fill-color-lighter);
          height: 100%;
          min-height: 100px;
       }
@@ -381,17 +517,17 @@ $bg-white: #ffffff;
    padding: 16px;
    
    .cert-table-wrapper {
-      border: 1px solid #ebeef5;
+      border: 1px solid var(--el-border-color-lighter);
       
       .expand-action {
           padding: 8px;
           text-align: center;
-          border-top: 1px solid #ebeef5;
-          background-color: #fafafe;
+          border-top: 1px solid var(--el-border-color-lighter);
+          background-color: var(--el-fill-color-light);
           cursor: pointer;
           
           &:hover {
-             background-color: #f0f2f5;
+             background-color: var(--el-fill-color);
           }
       }
    }

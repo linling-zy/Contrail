@@ -1,6 +1,6 @@
 <template>
-  <div class="app-container">
-    <el-page-header @back="goBack" title="返回">
+  <div class="app-container" :class="{'is-embedded': !!deptId}">
+    <el-page-header @back="goBack" title="返回" v-if="!deptId">
       <template #content>
         <span class="text-large font-600 mr-3"> 部门信息调整 </span>
       </template>
@@ -35,20 +35,24 @@
           </el-form>
        </el-card>
 
-       <!-- 自动加分配置 -->
-       <el-card class="section-card" header="加分配置">
+        <el-card class="section-card" header="加分配置">
           <el-form :model="form" label-width="100px">
-             <el-form-item label="自动加分时间">
+              <el-form-item label="基础分" prop="baseScore">
+                <el-input-number v-model="form.baseScore" :min="0" :max="100" placeholder="默认80" />
+                <span class="tip-text">设置后，新加入该部门学生的初始基础分将以此为准</span>
+              </el-form-item>
+              <el-form-item label="自动加分时间">
                 <el-date-picker
-                   v-model="form.autoScoreTime"
-                   type="datetime"
-                   placeholder="选择日期时间"
-                   value-format="YYYY-MM-DD HH:mm:ss"
+                    v-model="form.autoScoreTime"
+                    type="datetime"
+                    placeholder="选择日期时间"
+                    value-format="YYYY-MM-DD HH:mm:ss"
+                    :disabled-date="disabledDate"
                 />
-                <span class="tip-text">设置后将在该时间点作为执行周期起点开始加分</span>
-             </el-form-item>
+                <span class="tip-text">设置后将在该时间点作为执行周期起点开始加分（只能选择今天及以后的日期）</span>
+              </el-form-item>
           </el-form>
-       </el-card>
+        </el-card>
 
        <!-- 证书配置 -->
        <el-card class="section-card">
@@ -105,20 +109,35 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getDepartmentDetail, updateDepartment, getCertTypes, saveClassCerts } from '@/api/mock/system'
+import { getDepartmentDetail, updateDepartment, getCertTypes, bindCertificateTypesToDepartment } from '@/api/system'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+const props = defineProps({
+  deptId: {
+    type: [Number, String],
+    default: null
+  },
+  modelValue: { // for v-model binding of visibility if needed, or just to signal mode
+     type: Boolean, 
+     default: false
+  }
+})
+
+const emit = defineEmits(['close', 'update:modelValue'])
 
 const route = useRoute()
 const router = useRouter()
-const id = route.params.id
+// ID priority: prop > route param
+const id = computed(() => props.deptId || route.params.id)
 
 const form = reactive({
-  id: Number(id),
+  id: '', // Will be set in loadData
   college: '',
   grade: '',
   major: '',
   className: '',
   autoScoreTime: '',
+  baseScore: 80,
   boundCerts: [] // 存储ID
 })
 
@@ -135,32 +154,71 @@ const allCertTypes = ref([])
 const certDialogVisible = ref(false)
 const selectedCertsToAdd = ref([])
 
+// 禁用今天之前的日期
+const disabledDate = (time) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return time.getTime() < today.getTime()
+}
+
 // 计算当前绑定的证书详细信息列表
 const certList = computed(() => {
    return allCertTypes.value.filter(c => form.boundCerts.includes(c.id))
 })
 
 const loadData = async () => {
-   // 获取所有证书类型
-   const certRes = await getCertTypes()
-   allCertTypes.value = certRes.data
+   if (!id.value) return // If no ID, can't load
+   try {
+      // 获取所有证书类型
+      const certRes = await getCertTypes()
+      
+      // 适配后端返回的数据格式：{ certificate_types: [...] }
+      if (certRes.certificate_types) {
+         allCertTypes.value = certRes.certificate_types.map(item => ({
+            id: item.id,
+            name: item.name,
+            required: item.is_required !== false,
+            description: item.description || ''
+         }))
+      } else if (certRes.data && Array.isArray(certRes.data)) {
+         // Mock 数据格式（兼容）
+         allCertTypes.value = certRes.data
+      } else {
+         allCertTypes.value = []
+      }
 
-   // 获取部门详情
-   const res = await getDepartmentDetail(id)
-   const data = res.data
-   
-   Object.assign(form, {
-      college: data.college || '',
-      grade: data.grade || '',
-      major: data.major || '',
-      className: data.className || '',
-      autoScoreTime: data.autoScoreTime || '',
-      boundCerts: data.boundCerts || []
-   })
+      // 获取部门详情
+      const res = await getDepartmentDetail(id.value)
+      
+      // 适配后端返回的数据格式：{ department: {...} }
+      const dept = res.department || res.data || {}
+      
+      // 获取绑定的证书类型ID列表
+      const boundCertIds = dept.certificate_types ? dept.certificate_types.map(ct => ct.id) : []
+      
+      form.id = Number(id.value) // Ensure internal ID matches
+      Object.assign(form, {
+         college: dept.college || '',
+         grade: dept.grade || '',
+         major: dept.major || '',
+         className: dept.class_name || '',
+         autoScoreTime: dept.bonus_start_date ? `${dept.bonus_start_date} 00:00:00` : '',
+         baseScore: dept.base_score !== undefined ? dept.base_score : 80,
+         boundCerts: boundCertIds
+      })
+   } catch (error) {
+      console.error('加载数据失败:', error)
+      ElMessage.error(error.message || '加载数据失败')
+   }
 }
 
 const goBack = () => {
-   router.back()
+   if (props.deptId) {
+       emit('close')
+       emit('update:modelValue', false)
+   } else {
+       router.back()
+   }
 }
 
 const handleSave = async () => {
@@ -168,15 +226,33 @@ const handleSave = async () => {
       if (valid) {
          saving.value = true
          try {
-            await updateDepartment(form)
-            // 单独更新证书绑定逻辑（如果是分离接口的话，这里 mock 里 saveClassCerts 是分离的，但 updateDepartment 也应当包含数据更新）
-            // 在实际后端中可能是一个接口。这里为了确保 mock 状态一致，我们显式调用证书保存
-            await saveClassCerts(form.id, form.boundCerts)
+            // 更新部门基本信息
+            const updateData = {
+               college: form.college || null,
+               grade: form.grade || null,
+               major: form.major || null,
+               class_name: form.className || null,
+               base_score: form.baseScore
+            }
+            
+            // 处理自动加分时间（bonus_start_date）
+            if (form.autoScoreTime) {
+               // 从 datetime 字符串中提取日期部分
+               updateData.bonus_start_date = form.autoScoreTime.split(' ')[0]
+            } else {
+               updateData.bonus_start_date = null
+            }
+            
+            await updateDepartment(form.id, updateData)
+            
+            // 单独更新证书绑定
+            await bindCertificateTypesToDepartment(form.id, form.boundCerts)
             
             ElMessage.success('保存成功')
             goBack()
-         } catch (e) {
-            ElMessage.error('保存失败')
+         } catch (error) {
+            console.error('保存失败:', error)
+            ElMessage.error(error.message || error.error || '保存失败')
          } finally {
             saving.value = false
          }
@@ -213,13 +289,28 @@ const removeCert = (certId) => {
 onMounted(() => {
    loadData()
 })
+
+// Watch for prop changes if used as a component
+import { watch } from 'vue'
+watch(() => props.deptId, (newVal) => {
+    if (newVal) {
+        loadData()
+    }
+})
 </script>
 
 <style scoped lang="scss">
 .app-container {
    padding: 20px;
-   background-color: #f0f2f5;
+   background-color: var(--el-bg-color-page);
    min-height: 100vh;
+   transition: all 0.3s ease;
+   
+   &.is-embedded {
+       padding: 0;
+       background-color: transparent; // Let parent background show or be managed by drawer
+       min-height: auto;
+   }
 }
 
 .main-content {
@@ -238,7 +329,7 @@ onMounted(() => {
 
 .tip-text {
    margin-left: 10px;
-   color: #909399;
+   color: var(--el-text-color-secondary);
    font-size: 12px;
 }
 

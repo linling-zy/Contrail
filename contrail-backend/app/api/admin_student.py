@@ -69,6 +69,41 @@ def _extract_birth_and_gender(id_card_no: str):
     return birth_date, gender
 
 
+def _cleanup_old_export_files(app, max_age_minutes=30):
+    """
+    清理临时目录中超过指定时间的导出文件
+    
+    Args:
+        app: Flask 应用实例
+        max_age_minutes: 文件最大保留时间（分钟），默认30分钟
+    """
+    try:
+        temp_dir = os.path.join(app.instance_path, 'temp')
+        if not os.path.exists(temp_dir):
+            return
+        
+        current_time = datetime.now().timestamp()
+        max_age_seconds = max_age_minutes * 60
+        
+        for filename in os.listdir(temp_dir):
+            if filename.startswith('export_') and filename.endswith('.zip'):
+                file_path = os.path.join(temp_dir, filename)
+                try:
+                    # 获取文件修改时间
+                    file_mtime = os.path.getmtime(file_path)
+                    age_seconds = current_time - file_mtime
+                    
+                    # 如果文件超过指定时间，删除它
+                    if age_seconds > max_age_seconds:
+                        os.remove(file_path)
+                except (OSError, FileNotFoundError):
+                    # 文件可能已被删除或无法访问，忽略错误
+                    pass
+    except Exception:
+        # 清理失败不影响主流程，静默失败
+        pass
+
+
 def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
     """
     后台线程：部门学生档案批量导出
@@ -144,25 +179,31 @@ def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
                 for idx, user in enumerate(users):
                     birth_date, gender = _extract_birth_and_gender(user.id_card_no)
 
-                    # 过滤掉系统加分的积分流水
+                    # 过滤掉系统加分的积分流水，格式化为每行一条的字符串
                     score_logs_query = user.score_logs.filter(
                         ScoreLog.type != ScoreLog.TYPE_SYSTEM
                     ).order_by(ScoreLog.create_time.asc())
-                    score_logs = []
+                    score_logs_lines = []
                     for log in score_logs_query.all():
                         if log.delta is None:
                             continue
                         delta_str = f"+{log.delta}" if log.delta > 0 else str(log.delta)
-                        score_logs.append({
-                            'delta': delta_str,
-                            'reason': log.reason or '',
-                        })
+                        reason = log.reason or ''
+                        # 格式化为：+5，理由：长的好看；
+                        score_logs_lines.append(f"{delta_str}，理由：{reason}；")
+                    # 将列表合并为单个字符串，每行一条（使用换行符分隔）
+                    score_logs = '\n'.join(score_logs_lines) if score_logs_lines else ''
 
-                    # 仅保留审核通过的证书
+                    # 仅保留审核通过的证书，格式化为每行一条的字符串
                     certificates_query = user.certificates.filter_by(status=Certificate.STATUS_APPROVED)
-                    certificates = [{'name': cert.name} for cert in certificates_query.all()]
+                    certificates_lines = [cert.name for cert in certificates_query.all()]
+                    # 将列表合并为单个字符串，每行一条（使用换行符分隔）
+                    certificates = '\n'.join(certificates_lines) if certificates_lines else ''
 
                     dept = user.department or department
+                    # 生成导出日期（格式：2026年1月27日）
+                    export_date = datetime.now().strftime('%Y年%m月%d日')
+                    
                     context = {
                         'name': user.name,
                         'id_card_no': user.id_card_no,
@@ -174,6 +215,7 @@ def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
                         'gender': gender,
                         'score_logs': score_logs,
                         'certificates': certificates,
+                        'export_date': export_date,  # 导出日期
                     }
 
                     # 渲染模板
@@ -718,7 +760,7 @@ def get_export_status(task_id):
         download_url = None
         if status == 'completed':
             # 使用 url_for 生成下载链接（前端可直接使用）
-            download_url = url_for('admin_bp.download_export_file', task_id=task_id)
+            download_url = url_for('admin.download_export_file', task_id=task_id)
 
     return jsonify({
         'code': 200,
@@ -738,6 +780,9 @@ def download_export_file(task_id):
     下载导出的 ZIP 文件
     仅当任务完成且文件存在时才允许下载
     """
+    # 清理超过30分钟的旧文件
+    _cleanup_old_export_files(current_app, max_age_minutes=30)
+    
     admin_id = get_jwt_identity()
 
     with EXPORT_TASKS_LOCK:
@@ -938,12 +983,13 @@ def batch_register():
             else:
                 student_id = None
             
-            # 创建新用户
+            # 创建新用户，使用部门的基础分
             user = User(
                 id_card_no=id_card_no,
                 student_id=student_id,
                 name=name,
-                department_id=department.id
+                department_id=department.id,
+                base_score=department.base_score  # 使用部门的基础分
             )
             user.set_password(decrypted_password)
             
@@ -1202,7 +1248,7 @@ def update_student_archive(student_id):
                         'message': f'无效的状态值: {status_value}，支持的值: {", ".join(VALID_STATUSES)}'
                     }), 400
                 
-                # 更新对应字段
+                # 更新阶段状态
                 if stage_name == 'preliminary':
                     student.preliminary_status = status_value
                 elif stage_name == 'medical':
@@ -1246,16 +1292,19 @@ def import_students_from_excel():
     从 Excel 文件批量导入学生（管理员权限）
     
     请求格式: multipart/form-data
-    字段名: file (Excel 文件)
+    字段名: 
+    - file (Excel 文件)
+    - department_id (部门ID，整数，必填)
     
     Excel 文件格式要求：
-    - 第一行为列名：学号、姓名、身份证号、班级名称
+    - 第一行为列名：学号、姓名、身份证号
     - 支持 .xlsx 和 .xls 格式
+    - 不需要包含班级名称，班级由前端传入的 department_id 指定
     
     逻辑：
     - 如果学号在数据库中已存在，则跳过该行
-    - 如果班级名称在 Department 表中不存在，记录为错误
     - 如果身份证号已存在，则跳过该行
+    - 所有学生将导入到指定的 department_id
     - 普通管理员只能导入到其管理的部门
     
     返回: {
@@ -1302,6 +1351,21 @@ def import_students_from_excel():
     if not (filename.endswith('.xlsx') or filename.endswith('.xls')):
         return jsonify({'code': 400, 'message': '不支持的文件格式，仅支持 .xlsx 和 .xls 文件'}), 400
     
+    # 获取 department_id 参数
+    department_id_str = request.form.get('department_id')
+    if not department_id_str:
+        return jsonify({'code': 400, 'message': '缺少必需参数: department_id'}), 400
+    
+    try:
+        department_id = int(department_id_str)
+    except (ValueError, TypeError):
+        return jsonify({'code': 400, 'message': 'department_id 必须是整数'}), 400
+    
+    # 验证部门是否存在
+    department = Department.query.get(department_id)
+    if not department:
+        return jsonify({'code': 404, 'message': f'部门ID {department_id} 不存在'}), 404
+    
     # 获取管理员管理的部门列表（用于权限检查）
     if admin.role == AdminUser.ROLE_SUPER:
         managed_dept_ids = None  # 超级管理员可以访问所有部门
@@ -1310,6 +1374,10 @@ def import_students_from_excel():
         managed_dept_ids = [dept.id for dept in managed_departments]
         if not managed_dept_ids:
             return jsonify({'code': 403, 'message': '您没有管理的部门，无法导入学生'}), 403
+        
+        # 权限检查：普通管理员只能导入到其管理的部门
+        if department_id not in managed_dept_ids:
+            return jsonify({'code': 403, 'message': f'无权将学生导入到部门ID {department_id}'}), 403
     
     # 读取 Excel 文件
     try:
@@ -1321,9 +1389,10 @@ def import_students_from_excel():
             'message': f'Excel 文件读取失败: {str(e)}'
         }), 400
     
-    # 检查必需的列
-    required_columns = ['学号', '姓名', '身份证号', '班级名称']
+    # 检查必需的列（不再需要班级名称列）
+    required_columns = ['学号', '姓名', '身份证号']
     missing_columns = [col for col in required_columns if col not in df.columns]
+    
     if missing_columns:
         return jsonify({
             'code': 400,
@@ -1346,15 +1415,6 @@ def import_students_from_excel():
     existing_id_cards_query = User.query.with_entities(User.id_card_no).all()
     existing_id_cards = {str(card[0]) for card in existing_id_cards_query if card[0]}
     
-    # 缓存部门名称到ID的映射（避免重复查询）
-    department_cache = {}
-    all_departments = Department.query.all()
-    for dept in all_departments:
-        if dept.class_name:
-            # 如果同一个班级名称有多个部门，取第一个
-            if dept.class_name not in department_cache:
-                department_cache[dept.class_name] = dept.id
-    
     # 准备批量插入的数据
     users_to_add = []
     
@@ -1367,7 +1427,6 @@ def import_students_from_excel():
             student_id = str(row['学号']).strip() if pd.notna(row['学号']) else ''
             name = str(row['姓名']).strip() if pd.notna(row['姓名']) else ''
             id_card_no = str(row['身份证号']).strip() if pd.notna(row['身份证号']) else ''
-            class_name = str(row['班级名称']).strip() if pd.notna(row['班级名称']) else ''
             
             # 基本验证
             if not name:
@@ -1420,30 +1479,7 @@ def import_students_from_excel():
                 skip_count += 1
                 continue
             
-            # 查找部门
-            department_id = None
-            if class_name:
-                department_id = department_cache.get(class_name)
-                if not department_id:
-                    errors.append({
-                        'row': row_num,
-                        'student_id': student_id,
-                        'class_name': class_name,
-                        'error': f'班级名称 "{class_name}" 不存在'
-                    })
-                    error_count += 1
-                    continue
-                
-                # 权限检查：普通管理员只能导入到其管理的部门
-                if managed_dept_ids is not None and department_id not in managed_dept_ids:
-                    errors.append({
-                        'row': row_num,
-                        'student_id': student_id,
-                        'class_name': class_name,
-                        'error': f'无权将学生分配到班级 "{class_name}"'
-                    })
-                    error_count += 1
-                    continue
+            # 使用前端传入的 department_id（已在前面验证过）
             
             # 学号格式验证（如果提供了学号）
             if student_id:
@@ -1456,13 +1492,18 @@ def import_students_from_excel():
                     error_count += 1
                     continue
             
-            # 准备创建用户对象
+            # 准备创建用户对象（使用前端传入的 department_id）
+            # 使用部门的基础分，如果部门不存在则使用默认值80
+            department_base_score = 80
+            if department:
+                department_base_score = department.base_score
+            
             user = User(
                 id_card_no=id_card_no,
                 student_id=student_id if student_id else None,
                 name=name,
-                department_id=department_id,
-                base_score=80  # 默认基础分
+                department_id=department_id,  # 使用前端传入的部门ID
+                base_score=department_base_score  # 使用部门的基础分
             )
             # 设置默认密码（使用身份证号后6位作为初始密码）
             default_password = id_card_no[-6:]

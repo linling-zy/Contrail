@@ -3,7 +3,7 @@
 <view class="container" style="padding-bottom: {{paddingBottom}}px;">
   <!-- Section 1: Score -->
   <view class="score-section">
-    <view class="score-circle">
+    <view class="score-circle" bindtap="onScoreTap">
       <text class="score-num">{{score}}</text>
       <text class="score-label">分</text>
     </view>

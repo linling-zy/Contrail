@@ -2,9 +2,6 @@
   <el-scrollbar wrap-class="scrollbar-wrapper">
     <el-menu
       :default-active="activeMenu"
-      :background-color="variables.menuBg"
-      :text-color="variables.menuText"
-      :active-text-color="variables.menuActiveText"
       :collapse-transition="false"
       mode="vertical"
       router
@@ -59,11 +56,7 @@ const activeMenu = computed(() => {
   return path
 })
 
-const variables = {
-  menuBg: '#304156',
-  menuText: '#bfcbd9',
-  menuActiveText: '#409EFF'
-}
+
 </script>
 
 <style scoped lang="scss">
@@ -71,17 +64,56 @@ const variables = {
   height: 50px;
   line-height: 50px;
   text-align: center;
-  color: #fff;
-  background-color: #2b2f3a;
+  color: var(--el-text-color-primary);
+  background-color: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
   h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
+    letter-spacing: 0.5px;
   }
 }
 .el-menu {
   border: none;
   height: 100%;
   width: 100%;
+  padding-top: 8px;
+  background-color: var(--el-bg-color);
+}
+
+:deep(.el-menu-item) {
+  margin: 4px 8px;
+  border-radius: 6px;
+  height: 48px;
+  line-height: 48px;
+  color: var(--el-text-color-regular);
+  
+  &:hover {
+    background-color: var(--el-fill-color-light) !important;
+    color: var(--el-text-color-primary);
+  }
+  
+  &.is-active {
+    background-color: var(--el-color-primary-light-9) !important;
+    color: var(--el-color-primary);
+    position: relative;
+    font-weight: 600;
+  }
+
+  /* Adjust icon size and spacing if needed */
+  .el-icon {
+    margin-right: 12px;
+    font-size: 18px;
+  }
+}
+ 
+:deep(.el-sub-menu__title) {
+  color: var(--el-text-color-regular);
+  
+  &:hover {
+    background-color: var(--el-fill-color-light) !important;
+    color: var(--el-text-color-primary);
+  }
 }
 </style>

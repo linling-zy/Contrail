@@ -22,6 +22,7 @@ class Department(db.Model):
     major = db.Column(db.String(100), nullable=True, index=True, comment='专业')
     class_name = db.Column(db.String(50), nullable=True, index=True, comment='班级')
     bonus_start_date = db.Column(db.Date, nullable=True, comment='自动加分计算的基准起始日期（为空时使用系统默认配置）')
+    base_score = db.Column(db.Integer, default=80, nullable=False, comment='部门成员的基础分，默认80分')
     create_time = db.Column(db.DateTime, default=datetime.utcnow, comment='创建时间')
 
     # 关系：一个部门有多个用户
@@ -43,6 +44,7 @@ class Department(db.Model):
             'major': self.major,
             'class_name': self.class_name,
             'bonus_start_date': self.bonus_start_date.isoformat() if self.bonus_start_date else None,
+            'base_score': self.base_score,
         }
 
     def __repr__(self):

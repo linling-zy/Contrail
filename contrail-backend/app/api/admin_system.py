@@ -4,6 +4,7 @@
 提供证书类型管理和部门证书规则绑定功能
 仅限超级管理员访问
 """
+import logging
 from flask import request, jsonify
 from app.api.admin_auth import admin_bp
 from app.extensions import db
@@ -488,7 +489,8 @@ def create_department():
         "grade": "2023级",
         "major": "软件工程",
         "class_name": "2301班",
-        "bonus_start_date": "2024-01-01"  // 可选，格式 YYYY-MM-DD
+        "bonus_start_date": "2024-01-01",  // 可选，格式 YYYY-MM-DD
+        "base_score": 80  // 可选，部门成员的基础分，默认80
     }
     返回: { "department": {...}, "message": "创建成功" }
     """
@@ -502,16 +504,27 @@ def create_department():
     major = data.get('major', '').strip() or None
     class_name = data.get('class_name', '').strip() or None
     bonus_start_date_str = data.get('bonus_start_date', '').strip() or None
+    base_score = data.get('base_score', 80)  # 默认80分
     
     # 至少需要有一个字段不为空
     if not any([college, grade, major, class_name]):
         return jsonify({'error': '至少需要填写一个部门信息字段（学院/年级/专业/班级）'}), 400
+    
+    # 验证 base_score
+    if not isinstance(base_score, int):
+        return jsonify({'error': 'base_score 必须是整数'}), 400
+    if base_score < 0:
+        return jsonify({'error': 'base_score 不能为负数'}), 400
     
     # 解析 bonus_start_date
     bonus_start_date = None
     if bonus_start_date_str:
         try:
             bonus_start_date = datetime.strptime(bonus_start_date_str, '%Y-%m-%d').date()
+            # 验证：加分起始日期不能早于今天
+            today = datetime.utcnow().date()
+            if bonus_start_date < today:
+                return jsonify({'error': '加分起始日期不能早于今天'}), 400
         except ValueError:
             return jsonify({'error': 'bonus_start_date 格式错误，应为 YYYY-MM-DD'}), 400
     
@@ -521,7 +534,8 @@ def create_department():
         grade=grade,
         major=major,
         class_name=class_name,
-        bonus_start_date=bonus_start_date
+        bonus_start_date=bonus_start_date,
+        base_score=base_score
     )
     
     try:
@@ -556,12 +570,20 @@ def list_departments():
         error_out=False
     )
     
+    # 构建返回数据，包含每个部门的学生数量
+    items = []
+    for dept in pagination.items:
+        dept_dict = dept.to_dict()
+        # 添加学生数量
+        dept_dict['student_count'] = dept.users.count()
+        items.append(dept_dict)
+    
     return jsonify({
         'total': pagination.total,
         'page': page,
         'per_page': per_page,
         'pages': pagination.pages,
-        'items': [dept.to_dict() for dept in pagination.items]
+        'items': items
     }), 200
 
 
@@ -591,7 +613,8 @@ def update_department(dept_id):
         "grade": "2023级",  // 可选
         "major": "软件工程",  // 可选
         "class_name": "2301班",  // 可选
-        "bonus_start_date": "2024-01-01"  // 可选，格式 YYYY-MM-DD，传 null 可清空
+        "bonus_start_date": "2024-01-01",  // 可选，格式 YYYY-MM-DD，传 null 可清空
+        "base_score": 85  // 可选，部门成员的基础分
     }
     返回: { "department": {...}, "message": "更新成功" }
     """
@@ -614,6 +637,15 @@ def update_department(dept_id):
     if 'class_name' in data:
         department.class_name = data.get('class_name', '').strip() or None
     
+    # 更新 base_score
+    if 'base_score' in data:
+        base_score = data.get('base_score')
+        if not isinstance(base_score, int):
+            return jsonify({'error': 'base_score 必须是整数'}), 400
+        if base_score < 0:
+            return jsonify({'error': 'base_score 不能为负数'}), 400
+        department.base_score = base_score
+    
     # 更新 bonus_start_date
     if 'bonus_start_date' in data:
         bonus_start_date_str = data.get('bonus_start_date')
@@ -622,7 +654,12 @@ def update_department(dept_id):
             department.bonus_start_date = None
         elif isinstance(bonus_start_date_str, str) and bonus_start_date_str.strip():
             try:
-                department.bonus_start_date = datetime.strptime(bonus_start_date_str.strip(), '%Y-%m-%d').date()
+                bonus_start_date = datetime.strptime(bonus_start_date_str.strip(), '%Y-%m-%d').date()
+                # 验证：加分起始日期不能早于今天
+                today = datetime.utcnow().date()
+                if bonus_start_date < today:
+                    return jsonify({'error': '加分起始日期不能早于今天'}), 400
+                department.bonus_start_date = bonus_start_date
             except ValueError:
                 return jsonify({'error': 'bonus_start_date 格式错误，应为 YYYY-MM-DD'}), 400
         else:
@@ -682,10 +719,9 @@ def get_dashboard_stats():
             "total_students": 100,
             "total_departments": 10,
             "process_stats": {
-                "preliminary": {0: 10, 1: 80, 2: 10},
+                "admission": {0: 40, 1: 50, 2: 10},
                 "medical": {0: 20, 1: 70, 2: 10},
-                "political": {0: 30, 1: 60, 2: 10},
-                "admission": {0: 40, 1: 50, 2: 10}
+                "vetted": {0: 30, 1: 60, 2: 10}
             }
         },
         "message": "success"
@@ -716,16 +752,15 @@ def get_dashboard_stats():
             # 普通管理员只能看到自己管理的部门
             total_departments = admin.managed_departments.count()
         
-        # 统计四个阶段的状态分布（基于有权限的学生）
+        # 统计三个阶段的状态分布（基于有权限的学生）
         # 状态值映射：'pending' -> 0, 'qualified' -> 1, 'unqualified' -> 2
         process_stats = {}
         
-        # 四个阶段字段
+        # 三个阶段字段：录取(admission)、体检(medical)、政审(political/vetted)
         stages = {
-            'preliminary': User.preliminary_status,
+            'admission': User.admission_status,
             'medical': User.medical_status,
-            'political': User.political_status,
-            'admission': User.admission_status
+            'vetted': User.political_status  # 政审字段在数据库中为 political_status
         }
         
         for stage_name, stage_field in stages.items():
@@ -735,7 +770,7 @@ def get_dashboard_stats():
             unqualified_count = students_query.filter(stage_field == 'unqualified').count()
             
             process_stats[stage_name] = {
-                0: pending_count,      # 进行中(0)
+                0: pending_count,      # 待定(0)
                 1: qualified_count,    # 通过(1)
                 2: unqualified_count   # 不通过(2)
             }
@@ -753,5 +788,102 @@ def get_dashboard_stats():
         return jsonify({
             'code': 500,
             'message': f'获取统计数据失败: {str(e)}'
+        }), 500
+
+
+# ==================== 系统初始化 ====================
+
+@admin_bp.route('/system/init-status', methods=['GET'])
+def get_system_init_status():
+    """
+    获取系统初始化状态
+    检查是否已有管理员账号（用于判断系统是否已初始化）
+    返回: { "initialized": boolean }
+    """
+    try:
+        # 检查是否存在至少一个管理员
+        admin_count = AdminUser.query.count()
+        initialized = admin_count > 0
+        
+        return jsonify({
+            'initialized': initialized
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': f'获取系统初始化状态失败: {str(e)}'
+        }), 500
+
+
+@admin_bp.route('/system/initialize', methods=['POST'])
+def initialize_system():
+    """
+    初始化系统（创建首个超级管理员）
+    仅在系统未初始化时可用（即没有任何管理员账号时）
+    请求体: {
+        "username": "管理员账号",
+        "password": "RSA加密后的密码(base64)",
+        "name": "真实姓名"
+    }
+    返回: { "admin": {...}, "message": "系统初始化成功" }
+    """
+    try:
+        # 检查系统是否已初始化
+        admin_count = AdminUser.query.count()
+        if admin_count > 0:
+            return jsonify({
+                'error': '系统已初始化，无法重复初始化'
+            }), 400
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': '请求体不能为空'}), 400
+        
+        username = data.get('username')
+        password = data.get('password')
+        name = data.get('name', 'Super Admin')
+        
+        # 参数验证
+        if not username or not password:
+            return jsonify({'error': '用户名和密码不能为空'}), 400
+        
+        # 解密密码
+        try:
+            rsa_utils = get_rsa_utils()
+            password = rsa_utils.decrypt_password(password)
+        except ValueError as e:
+            return jsonify({'error': f'密码解密失败，请确保密码已使用RSA公钥加密: {str(e)}'}), 400
+        except Exception as e:
+            return jsonify({'error': f'密码处理失败: {str(e)}'}), 400
+        
+        # 创建首个超级管理员
+        admin = AdminUser(
+            username=username.strip(),
+            name=name.strip(),
+            role=AdminUser.ROLE_SUPER  # 首个管理员必须是超级管理员
+        )
+        admin.set_password(password)
+        
+        try:
+            db.session.add(admin)
+            db.session.commit()
+            
+            return jsonify({
+                'message': '系统初始化成功',
+                'admin': {
+                    'id': admin.id,
+                    'username': admin.username,
+                    'name': admin.name,
+                    'role': admin.role,
+                    'create_time': admin.create_time.isoformat() if admin.create_time else None
+                }
+            }), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'系统初始化失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        return jsonify({
+            'error': f'系统初始化失败: {str(e)}'
         }), 500
 

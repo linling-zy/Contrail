@@ -115,7 +115,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
-import { getCertificates, updateStatus } from '@/api/mock/certificate'
+import { getCertificates, auditCertificate } from '@/api/certificate'
 import { ElMessage } from 'element-plus'
 import { Search, Filter } from '@element-plus/icons-vue'
 import CertificateCard from './components/CertificateCard.vue'
@@ -170,11 +170,39 @@ onMounted(() => {
 const getList = async () => {
   loading.value = true
   try {
-    const res = await getCertificates({}) // Fetch ALL data, handle filtering locally for smoothness
-    tableData.value = res.data.list
+    // 调用真实 API，获取所有证书（不传 status 参数）
+    const res = await getCertificates({})
+    
+    // 适配后端返回的数据格式：{ total, page, per_page, pages, items }
+    if (res.items) {
+      // 转换数据格式以适配前端显示
+      tableData.value = res.items.map(item => {
+        const student = item.student || {}
+        const department = student.department || {}
+        
+        return {
+          id: item.id,
+          studentName: student.name || '未知学生',
+          className: department.class_name || department.name || '未知班级',
+          certName: item.certName || item.name || '未知证书',
+          status: item.status, // 0:待审, 1:通过, 2:驳回
+          imgUrl: item.imgUrl || '',
+          uploadTime: item.upload_time || item.uploadTime || '',
+          rejectReason: item.reject_reason || item.rejectReason || ''
+        }
+      })
+    } else if (res.data && res.data.list) {
+      // Mock 数据格式（兼容）
+      tableData.value = res.data.list
+    } else {
+      tableData.value = []
+    }
+    
     autoSelectFirst()
   } catch (error) {
-    ElMessage.error('获取列表失败')
+    console.error('获取证书列表失败:', error)
+    ElMessage.error(error.message || '获取列表失败')
+    tableData.value = []
   } finally {
     loading.value = false
   }
@@ -188,8 +216,8 @@ const autoSelectFirst = () => {
 
 const handleStatusFilter = (command) => {
   queryParams.status = command
-  // Clear selection if current item is filtered out? 
-  // Or keep it? keeping it is better usually, but if we filter strictly:
+  // 当状态筛选变化时，可以选择重新获取数据或使用本地过滤
+  // 这里使用本地过滤以保持流畅体验，如果需要实时数据可以调用 getList()
   nextTick(() => {
     if (filteredList.value.length > 0) {
        // if current item is NOT in filtered list, select the first one
@@ -262,21 +290,32 @@ const formatTime = (timeStr) => {
 }
 
 // Actions
-const handleApprove = (row) => {
+const handleApprove = async (row) => {
   // Optimistic UI update
   const target = tableData.value.find(i => i.id === row.id)
-  if (target) {
-     target.status = 1 // Update Status
-     ElMessage.success('审核已通过，自动切换下一条')
-     
-     // Trigger Auto Advance
-     advanceToNext(row.id)
-     
-     // Call API in background
-     updateStatus(row.id, 1).catch(() => {
-        target.status = 0 // Revert
-        ElMessage.error('操作失败，已撤回')
-     })
+  if (!target) return
+  
+  const oldStatus = target.status
+  target.status = 1 // Update Status
+  ElMessage.success('审核已通过，自动切换下一条')
+  
+  // Trigger Auto Advance
+  advanceToNext(row.id)
+  
+  // Call API in background
+  try {
+    const res = await auditCertificate(row.id, 'approve')
+    if (res.certificate) {
+      // 更新本地数据
+      Object.assign(target, {
+        status: res.certificate.status,
+        rejectReason: res.certificate.reject_reason || ''
+      })
+    }
+  } catch (error) {
+    console.error('审核失败:', error)
+    target.status = oldStatus // Revert
+    ElMessage.error(error.message || '操作失败，已撤回')
   }
 }
 
@@ -287,35 +326,51 @@ const handleReject = (row) => {
 }
 
 const confirmReject = async () => {
-  if (!rejectForm.reason) return ElMessage.warning('请输入原因')
+  if (!rejectForm.reason || !rejectForm.reason.trim()) {
+    return ElMessage.warning('请输入驳回原因')
+  }
   
   const target = tableData.value.find(i => i.id === rejectForm.id)
-  if (target) {
-    target.status = 2
-    target.rejectReason = rejectForm.reason
-    ElMessage.success('已驳回，自动切换下一条')
-    
-    rejectDialogVisible.value = false
-    advanceToNext(target.id)
-    
-     // Call API in background
-     updateStatus(rejectForm.id, 2, rejectForm.reason).catch(() => {
-        target.status = 0 // Revert
-        ElMessage.error('操作失败，已撤回')
-     })
+  if (!target) return
+  
+  const oldStatus = target.status
+  const oldReason = target.rejectReason
+  
+  target.status = 2
+  target.rejectReason = rejectForm.reason.trim()
+  ElMessage.success('已驳回，自动切换下一条')
+  
+  rejectDialogVisible.value = false
+  advanceToNext(target.id)
+  
+  // Call API in background
+  try {
+    const res = await auditCertificate(rejectForm.id, 'reject', rejectForm.reason.trim())
+    if (res.certificate) {
+      // 更新本地数据
+      Object.assign(target, {
+        status: res.certificate.status,
+        rejectReason: res.certificate.reject_reason || rejectForm.reason.trim()
+      })
+    }
+  } catch (error) {
+    console.error('驳回失败:', error)
+    target.status = oldStatus // Revert
+    target.rejectReason = oldReason
+    ElMessage.error(error.message || '操作失败，已撤回')
   }
 }
 </script>
 
 <style scoped lang="scss">
 // Tokens
-$bg-sidebar: #ffffff;
-$bg-canvas: #F5F7FA;
-$primary: #409EFF;
-$border: #EBEEF5;
-$text-main: #303133;
-$text-sub: #909399;
-$active-bg: #ecf5ff;
+$bg-sidebar: var(--el-bg-color);
+$bg-canvas: var(--el-bg-color-page);
+$primary: var(--el-color-primary);
+$border: var(--el-border-color-light);
+$text-main: var(--el-text-color-primary);
+$text-sub: var(--el-text-color-secondary);
+$active-bg: var(--el-color-primary-light-9);
 
 .workbench-container {
   display: flex;
@@ -333,7 +388,7 @@ $active-bg: #ecf5ff;
   display: flex;
   flex-direction: column;
   z-index: 10;
-  box-shadow: 4px 0 24px rgba(0,0,0,0.02);
+  box-shadow: var(--el-shadow-light);
   
   .sidebar-header {
     padding: 24px;
@@ -356,10 +411,10 @@ $active-bg: #ecf5ff;
         flex: 1;
         :deep(.el-input__wrapper) {
           border-radius: 8px;
-          background-color: #f5f7fa;
+          background-color: var(--el-fill-color);
           box-shadow: none !important;
           padding: 8px 12px;
-          &:hover, &.is-focus { background-color: white; box-shadow: 0 0 0 1px $primary !important; }
+          &:hover, &.is-focus { background-color: var(--el-bg-color-overlay); box-shadow: 0 0 0 1px $primary !important; }
         }
       }
       
@@ -367,8 +422,8 @@ $active-bg: #ecf5ff;
         width: 40px; 
         height: 40px;
         border-color: transparent;
-        background: #f5f7fa;
-        &:hover { color: $primary; background: #ecf5ff; }
+        background: var(--el-fill-color);
+        &:hover { color: $primary; background: var(--el-fill-color-dark); }
       }
     }
     
@@ -383,20 +438,20 @@ $active-bg: #ecf5ff;
         font-size: 13px;
         padding: 5px 14px;
         border-radius: 100px;
-        background: #f5f7fa;
+        background: var(--el-fill-color);
         color: $text-sub;
         cursor: pointer;
         white-space: nowrap;
         font-weight: 500;
         transition: all 0.2s;
         
-        &:hover { background: #e6e8eb; }
-        &.active { background: #333; color: white; transform: translateY(-1px); }
+        &:hover { background: var(--el-fill-color-dark); }
+        &.active { background: var(--el-text-color-primary); color: var(--el-bg-color); transform: translateY(-1px); }
         
         // Contextual colors for active states
-        &.warning.active { background: #fa8c16; }
-        &.success.active { background: #52c41a; }
-        &.danger.active { background: #F56C6C; }
+        &.warning.active { background: var(--el-color-warning); }
+        &.success.active { background: var(--el-color-success); }
+        &.danger.active { background: var(--el-color-danger); }
       }
     }
   }
@@ -408,14 +463,14 @@ $active-bg: #ecf5ff;
     
     .list-item {
       padding: 20px 24px;
-      border-bottom: 1px solid #f9fafc;
+      border-bottom: 1px solid var(--el-border-color-lighter);
       cursor: pointer;
       position: relative;
       transition: all 0.2s;
-      background: white;
+      background: var(--el-bg-color);
       
       &:hover {
-        background-color: #fcfcfd;
+        background-color: var(--el-fill-color-light);
         padding-left: 28px; // Subtle shift
       }
       
@@ -475,8 +530,8 @@ $active-bg: #ecf5ff;
         
         .class-name {
           font-size: 12px;
-          color: #909399;
-          background: #f5f7fa;
+          color: $text-sub;
+          background: var(--el-fill-color);
           padding: 3px 8px;
           border-radius: 6px;
         }

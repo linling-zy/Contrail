@@ -112,6 +112,9 @@
     <!-- 批量导入弹窗 -->
     <el-dialog v-model="importDialogVisible" title="导入数据" width="500px" class="formal-dialog">
       <div class="upload-container">
+        <div v-if="className" class="import-info" style="margin-bottom: 16px; padding: 12px; background: var(--el-bg-color-page); border-radius: 4px;">
+          <el-text type="info">将导入到班级：<strong>{{ className }}</strong></el-text>
+        </div>
         <el-upload
           ref="uploadRef"
           class="upload-demo"
@@ -127,7 +130,12 @@
             将 Excel 文件拖拽至此，或 <em>点击上传</em>
           </div>
           <template #tip>
-             <div class="el-upload__tip">支持 .xlsx / .xls 格式文件</div>
+             <div class="el-upload__tip">
+               <div>支持 .xlsx / .xls 格式文件</div>
+               <div style="margin-top: 4px; color: var(--el-text-color-secondary);">
+                 Excel 表格需包含列：学号、姓名、身份证号（不需要班级名称列）
+               </div>
+             </div>
           </template>
         </el-upload>
       </div>
@@ -137,10 +145,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getStudents, startExportTask, getExportTaskStatus, uploadStudentFile } from '@/api/mock/student'
-import { getDepartments } from '@/api/mock/system'
+import { getStudents, importStudents, startExportTask, getExportTaskStatus, downloadExportFile } from '@/api/student'
+import { getDepartments } from '@/api/system'
 import { ElMessage } from 'element-plus'
 import { Search, ArrowLeft, Upload, Download, User, UploadFilled } from '@element-plus/icons-vue'
 import StudentArchive from './components/StudentArchive.vue'
@@ -154,7 +162,8 @@ const tableData = ref([])
 const className = ref('')
 const queryParams = reactive({
   name: '',
-  classId: route.params.classId
+  classId: route.params.classId || null,
+  department_id: route.params.classId || null  // 使用 department_id 作为主要参数
 })
 
 const currentId = ref(null)
@@ -196,17 +205,69 @@ onMounted(() => {
   getList()
 })
 
+// 监听路由参数变化（部门选择变化）
+watch(() => route.params.classId, (newClassId) => {
+  if (newClassId) {
+    queryParams.classId = newClassId
+    queryParams.department_id = newClassId
+    getClassName()
+    getList()
+  }
+}, { immediate: false })
+
 // Methods
 const getList = async () => {
   loading.value = true
   try {
-    const res = await getStudents({ classId: queryParams.classId }) 
-    tableData.value = res.data.list
+    // 使用 department_id 参数调用真实 API
+    const params = {}
+    if (queryParams.department_id) {
+      params.department_id = queryParams.department_id
+    }
+    // 如果有搜索关键词，也传递
+    if (queryParams.name) {
+      params.filter = 'name'
+      params.keyword = queryParams.name
+    }
+    
+    const res = await getStudents(params)
+    
+    // 适配后端返回的数据格式：{ total, page, per_page, pages, items }
+    if (res.items) {
+      // 后端返回格式
+      tableData.value = res.items.map(item => {
+        // 转换数据格式以适配前端显示
+        const mapped = {
+          id: item.id,
+          name: item.name,
+          studentNo: item.student_id || item.id_card_no, // 使用 student_id 或 id_card_no
+          idCard: item.id_card_no || '', // 添加身份证号字段映射
+          className: item.class_name || '',
+          totalScore: item.total_score || 0,
+          status: item.process_status || {
+            preliminary: item.preliminary_status || 'pending',
+            medical: item.medical_status || 'pending',
+            political: item.political_status || 'pending',
+            admission: item.admission_status || 'pending'
+          }
+        }
+        
+        return mapped
+      })
+    } else if (res.data && res.data.list) {
+      // Mock 数据格式（兼容）
+      tableData.value = res.data.list
+    } else {
+      tableData.value = []
+    }
+    
     if (tableData.value.length > 0 && !currentId.value) {
        currentId.value = tableData.value[0].id
     }
   } catch (error) {
-    ElMessage.error('无法加载学生数据')
+    console.error('加载学生数据失败:', error)
+    ElMessage.error(error.message || '无法加载学生数据')
+    tableData.value = []
   } finally {
     loading.value = false
   }
@@ -214,14 +275,31 @@ const getList = async () => {
 
 const getClassName = async () => {
     try {
-        const res = await getDepartments()
-        const cls = res.data.find(d => d.id == route.params.classId)
-        if(cls) className.value = cls.name
-    } catch (e) {}
+        const res = await getDepartments({ per_page: 100 })
+        
+        // 适配后端返回的数据格式
+        let deptList = []
+        if (res.items) {
+            deptList = res.items
+        } else if (res.data && Array.isArray(res.data)) {
+            deptList = res.data
+        }
+        
+        const cls = deptList.find(d => d.id == route.params.classId)
+        if (cls) {
+            // 构建部门名称
+            className.value = cls.class_name || 
+                            `${cls.college || ''}${cls.grade || ''}${cls.major || ''}${cls.class_name || ''}`.trim() || 
+                            '未知班级'
+        }
+    } catch (e) {
+        console.error('获取班级名称失败:', e)
+    }
 }
 
 const handleSearch = () => {
-   // Client-side filtering
+   // 触发重新获取数据（带搜索关键词）
+   getList()
 }
 
 const handleSelect = (student) => {
@@ -262,8 +340,6 @@ const itemRefs = ref({})
 const setItemRef = (el, id) => {
    if (el) itemRefs.value[id] = el
 }
-
-import { nextTick, watch } from 'vue'
 
 watch(currentId, async (newId) => {
    if (!newId) return
@@ -349,13 +425,27 @@ const handleExport = async () => {
     if (!queryParams.classId) return
     try {
         const res = await startExportTask(queryParams.classId)
-        exportTaskId.value = res.data.taskId
-        exportDialogVisible.value = true
-        exportStatus.value = 'processing'
-        exportProgress.value = 0
-        pollExportStatus()
+        
+        // 适配后端返回的数据格式：{ code: 200, task_id: "..." }
+        if (res.code === 200 && res.task_id) {
+            exportTaskId.value = res.task_id
+            exportDialogVisible.value = true
+            exportStatus.value = 'processing'
+            exportProgress.value = 0
+            pollExportStatus()
+        } else if (res.task_id) {
+            // 兼容其他格式
+            exportTaskId.value = res.task_id
+            exportDialogVisible.value = true
+            exportStatus.value = 'processing'
+            exportProgress.value = 0
+            pollExportStatus()
+        } else {
+            ElMessage.error(res.error || '导出任务创建失败')
+        }
     } catch (error) {
-        ElMessage.error('导出失败')
+        console.error('导出失败:', error)
+        ElMessage.error(error.message || '导出失败')
     }
 }
 
@@ -364,24 +454,67 @@ const pollExportStatus = () => {
     exportTimer = setInterval(async () => {
         try {
             const res = await getExportTaskStatus(exportTaskId.value)
-            const { status, progress, download_url } = res.data
-            exportStatus.value = status
-            exportProgress.value = progress
-            if (status === 'completed') {
-                clearInterval(exportTimer)
-                downloadUrl.value = download_url
-            } else if (status === 'failed') {
-                clearInterval(exportTimer)
+            
+            // 适配后端返回的数据格式：{ code: 200, status, progress, total, download_url, error }
+            if (res.code === 200) {
+                const { status, progress, total, download_url, error } = res
+                exportStatus.value = status
+                exportProgress.value = total > 0 ? Math.round((progress / total) * 100) : 0
+                
+                if (status === 'completed') {
+                    clearInterval(exportTimer)
+                    if (download_url) {
+                        // 使用完整URL或相对路径
+                        downloadUrl.value = download_url.startsWith('http') 
+                            ? download_url 
+                            : `http://127.0.0.1:5000${download_url}`
+                    }
+                } else if (status === 'failed') {
+                    clearInterval(exportTimer)
+                    if (error) {
+                        ElMessage.error(`导出失败: ${error}`)
+                    }
+                }
+            } else {
+                // 兼容其他格式
+                const { status, progress, download_url } = res.data || res
+                exportStatus.value = status
+                exportProgress.value = progress || 0
+                if (status === 'completed') {
+                    clearInterval(exportTimer)
+                    downloadUrl.value = download_url
+                } else if (status === 'failed') {
+                    clearInterval(exportTimer)
+                }
             }
         } catch (error) {
+            console.error('查询导出状态失败:', error)
             clearInterval(exportTimer)
             exportStatus.value = 'failed'
+            ElMessage.error(error.message || '查询导出状态失败')
         }
     }, 1000)
 }
 
-const handleDownload = () => {
-    ElMessage.success('下载开始: ' + downloadUrl.value)
+const handleDownload = async () => {
+    if (exportTaskId.value) {
+        // 始终使用 downloadExportFile API（可以添加 Authorization 头）
+        try {
+            const blob = await downloadExportFile(exportTaskId.value)
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `学生档案导出_${new Date().getTime()}.zip`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(url)
+            ElMessage.success('下载完成')
+        } catch (error) {
+            console.error('下载失败:', error)
+            ElMessage.error(error.message || '下载失败')
+        }
+    }
     exportDialogVisible.value = false
 }
 
@@ -392,14 +525,58 @@ const handleImport = () => {
 const customUploadRequest = async (option) => {
   const formData = new FormData()
   formData.append('file', option.file)
+  
+  // 获取当前班级的 department_id
+  const currentDepartmentId = queryParams.department_id || queryParams.classId
+  if (!currentDepartmentId) {
+    ElMessage.error('请先选择班级')
+    importLoading.value = false
+    return
+  }
+  
   importLoading.value = true
   try {
-    const res = await uploadStudentFile(formData)
-    ElMessage.success(`导入完成: 成功${res.data.successCount}, 失败${res.data.failCount}`)
-    importDialogVisible.value = false
-    getList()
+    const res = await importStudents(formData, currentDepartmentId)
+    
+    if (res.code === 200 && res.data) {
+      const { success_count, skip_count, error_count, errors } = res.data
+      
+      // 构建提示消息
+      let message = `导入完成: 成功 ${success_count} 条`
+      if (skip_count > 0) {
+        message += `，跳过 ${skip_count} 条`
+      }
+      if (error_count > 0) {
+        message += `，失败 ${error_count} 条`
+      }
+      
+      if (success_count > 0) {
+        ElMessage.success(message)
+      } else if (error_count > 0 || skip_count > 0) {
+        ElMessage.warning(message)
+      } else {
+        ElMessage.info('没有数据被导入')
+      }
+      
+      // 如果有错误详情，在控制台输出
+      if (errors && errors.length > 0) {
+        console.warn('导入错误详情:', errors)
+        // 可以选择显示错误详情，但为了避免信息过多，只在控制台输出
+        if (errors.length <= 10) {
+          const errorMsg = errors.map(e => `第${e.row}行: ${e.error}`).join('\n')
+          ElMessage.warning(`部分数据导入失败:\n${errorMsg}`)
+        }
+      }
+      
+      importDialogVisible.value = false
+      // 刷新列表
+      getList()
+    } else {
+      ElMessage.error(res.message || '导入失败')
+    }
   } catch (error) {
-    ElMessage.error('导入出错')
+    console.error('导入出错:', error)
+    ElMessage.error(error.message || '导入出错，请检查文件格式')
   } finally {
     importLoading.value = false
   }
@@ -408,12 +585,12 @@ const customUploadRequest = async (option) => {
 
 <style scoped lang="scss">
 $sidebar-width: 320px;
-$bg-sidebar: #f8f9fa;
-$bg-canvas: #ffffff;
-$border-color: #dcdfe6;
-$text-primary: #303133;
-$text-secondary: #909399;
-$primary-color: #409EFF;
+$bg-sidebar: var(--el-bg-color-page);
+$bg-canvas: var(--el-bg-color);
+$border-color: var(--el-border-color-light);
+$text-primary: var(--el-text-color-primary);
+$text-secondary: var(--el-text-color-secondary);
+$primary-color: var(--el-color-primary);
 
 .student-workbench {
   display: flex;
@@ -426,7 +603,7 @@ $primary-color: #409EFF;
 // Sidebar
 .sidebar-panel {
   width: $sidebar-width;
-  background: #ffffff;
+  background: var(--el-bg-color);
   border-right: 1px solid $border-color;
   display: flex;
   flex-direction: column;
@@ -435,7 +612,7 @@ $primary-color: #409EFF;
   .sidebar-toolbar {
      padding: 16px 20px;
      border-bottom: 1px solid $border-color;
-     background: #fcfcfc;
+     background: var(--el-bg-color);
      
      .back-link {
         display: inline-flex;
@@ -498,7 +675,7 @@ $primary-color: #409EFF;
      flex: 1;
      display: flex;
      flex-direction: column;
-     background: #ffffff;
+     background: var(--el-bg-color);
      overflow: hidden;
      
      :deep(.el-scrollbar) {
@@ -508,7 +685,7 @@ $primary-color: #409EFF;
      .list-header-row {
         display: flex;
         padding: 8px 16px;
-        background: #f5f7fa;
+        background: var(--el-fill-color-light);
         border-bottom: 1px solid $border-color;
         font-size: 12px;
         color: $text-secondary;
@@ -527,9 +704,9 @@ $primary-color: #409EFF;
         transition: background 0.1s;
         align-items: center;
         
-        &:hover { background: #f5f7fa; }
+        &:hover { background: var(--el-fill-color-light); }
         &.active { 
-           background: #ecf5ff; 
+           background: var(--el-color-primary-light-9); 
            border-left: 3px solid $primary-color;
            padding-left: 13px; // Adjust for border
         }
@@ -566,7 +743,7 @@ $primary-color: #409EFF;
 // Canvas
 .detail-canvas {
    flex: 1;
-   background: #f2f3f5;
+   background: var(--el-bg-color-page);
    padding: 24px;
    display: flex;
    justify-content: center;

@@ -115,5 +115,10 @@ Page({
         wx.navigateTo({
             url: `/pages/comment/comment?comment=${q}`,
         });
+    },
+    onScoreTap() {
+        wx.navigateTo({
+            url: '/pages/score_detail/score_detail',
+        });
     }
 })

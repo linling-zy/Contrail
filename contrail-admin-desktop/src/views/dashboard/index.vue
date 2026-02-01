@@ -131,8 +131,7 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { getStudents } from '@/api/mock/student'
-import { getDepartments } from '@/api/mock/system'
+import { getDashboardStats } from '@/api/dashboard'
 import { User, School, Timer, TrendCharts, Plus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
@@ -147,10 +146,9 @@ const stats = reactive({
   avgScore: 0,
   // Detailed counts for each stage
   details: {
-    preliminary: { qualified: 0, pending: 0, failed: 0 },
+    admission: { qualified: 0, pending: 0, failed: 0 },
     medical: { qualified: 0, pending: 0, failed: 0 },
-    political: { qualified: 0, pending: 0, failed: 0 },
-    admission: { qualified: 0, pending: 0, failed: 0 }
+    vetted: { qualified: 0, pending: 0, failed: 0 }
   }
 })
 
@@ -163,10 +161,9 @@ const handleLogout = () => {
 
 const getStageName = (key) => {
   const map = {
-    preliminary: '初试',
+    admission: '录取',
     medical: '体检',
-    political: '政审',
-    admission: '录取'
+    vetted: '政审'
   }
   return map[key] || key
 }
@@ -175,7 +172,7 @@ const initChart = () => {
   if (!chartRef.value) return
   const myChart = echarts.init(chartRef.value)
   
-  const stages = ['preliminary', 'medical', 'political', 'admission']
+  const stages = ['admission', 'medical', 'vetted']
   const stageNames = stages.map(s => getStageName(s))
   
   // Extract data for series
@@ -258,69 +255,57 @@ const initChart = () => {
 
 const loadData = async () => {
   try {
-    const [stuRes, deptRes] = await Promise.all([
-      getStudents({}),
-      getDepartments()
-    ])
-
-    const students = stuRes.data.list
-    const depts = deptRes.data
-
-    stats.totalStudents = students.length
-    stats.totalClasses = depts.length
-
-    let pending = 0
-    let totalScoreSum = 0
+    // 调用后端统计接口
+    const res = await getDashboardStats()
     
-    // Initialize details
-    const tempDetails = {
-      preliminary: { qualified: 0, pending: 0, failed: 0 },
-      medical: { qualified: 0, pending: 0, failed: 0 },
-      political: { qualified: 0, pending: 0, failed: 0 },
-      admission: { qualified: 0, pending: 0, failed: 0 }
-    }
-
-    const stages = ['preliminary', 'medical', 'political', 'admission']
-    const pendingList = []
-
-    students.forEach(s => {
-      let hasPending = false
+    if (res.code === 200 && res.data) {
+      const data = res.data
       
-      // General pending count
-      Object.values(s.status || {}).forEach(status => {
-        if (status === 'pending') {
-            pending++
-            hasPending = true
-        }
-      })
-      totalScoreSum += s.totalScore
-
-      if (hasPending) {
-        pendingList.push(s)
+      // 更新统计数据
+      stats.totalStudents = data.total_students || 0
+      stats.totalClasses = data.total_departments || 0
+      
+      // 处理阶段状态统计
+      const processStats = data.process_stats || {}
+      const stages = ['admission', 'medical', 'vetted']
+      
+      // 初始化详情数据
+      const tempDetails = {
+        admission: { qualified: 0, pending: 0, failed: 0 },
+        medical: { qualified: 0, pending: 0, failed: 0 },
+        vetted: { qualified: 0, pending: 0, failed: 0 }
       }
-
-      // Count for each stage
+      
+      // 计算待办事项总数（所有阶段中状态为 pending 的数量）
+      let pendingCount = 0
+      
       stages.forEach(stage => {
-        const status = s.status?.[stage] || 'pending'
-        if (status === 'qualified') tempDetails[stage].qualified++
-        else if (status === 'failed') tempDetails[stage].failed++
-        else tempDetails[stage].pending++
+        const stageStats = processStats[stage] || {}
+        // 状态映射：0=待定(pending), 1=通过(qualified), 2=不通过(unqualified/failed)
+        tempDetails[stage].pending = stageStats[0] || 0
+        tempDetails[stage].qualified = stageStats[1] || 0
+        tempDetails[stage].failed = stageStats[2] || 0
+        
+        pendingCount += tempDetails[stage].pending
       })
-    })
-
-    // Update list to show pending students
-    studentList.value = pendingList.slice(0, 7)
-
-    stats.details = tempDetails
-    stats.pendingCount = pending
-    stats.avgScore = students.length ? Math.round(totalScoreSum / students.length) : 0
-
-    nextTick(() => {
-      initChart()
-    })
-
+      
+      stats.details = tempDetails
+      stats.pendingCount = pendingCount
+      
+      // 平均积分暂时设为 0（后端接口未返回，如需可后续添加）
+      stats.avgScore = 0
+      
+      // 待办审核列表暂时为空（后端接口未返回，如需可后续添加或单独调用接口）
+      studentList.value = []
+      
+      nextTick(() => {
+        initChart()
+      })
+    } else {
+      console.error('获取统计数据失败:', res.message || '未知错误')
+    }
   } catch (error) {
-    console.error(error)
+    console.error('加载数据失败:', error)
   }
 }
 
@@ -330,12 +315,14 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Dashboard Container */
 .dashboard-container {
   padding: 24px 32px;
-  background-color: #f7f9fc;
+  background-color: var(--el-bg-color-page);
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #1f2d3d;
+  color: var(--el-text-color-primary);
+  transition: background-color 0.3s;
 }
 
 /* Header */
@@ -350,12 +337,12 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: #111827;
+  color: var(--el-text-color-primary);
 }
 
 .header-content .subtitle {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--el-text-color-secondary);
   margin: 0;
 }
 
@@ -368,18 +355,18 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: white;
+  background: var(--el-bg-color);
   border-radius: 16px;
   padding: 24px;
   display: flex;
   align-items: center;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.01), 0 1px 2px -1px rgba(0, 0, 0, 0.01);
-  border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--el-border-color-light);
   transition: all 0.2s;
 }
 
 .stat-card:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.01);
+  box-shadow: var(--el-box-shadow-light);
   transform: translateY(-2px);
 }
 
@@ -394,10 +381,11 @@ onMounted(() => {
   font-size: 20px;
 }
 
-.bg-blue { background-color: #eff6ff; color: #3b82f6; }
-.bg-green { background-color: #f0fdf4; color: #22c55e; }
-.bg-orange { background-color: #fff7ed; color: #f97316; }
-.bg-purple { background-color: #faf5ff; color: #a855f7; }
+/* Use Element Plus theme vars for automated dark mode support */
+.bg-blue { background-color: var(--el-color-primary-light-9); color: var(--el-color-primary); }
+.bg-green { background-color: var(--el-color-success-light-9); color: var(--el-color-success); }
+.bg-orange { background-color: var(--el-color-warning-light-9); color: var(--el-color-warning); }
+.bg-purple { background-color: var(--el-color-danger-light-9); color: var(--el-color-danger); }
 
 .stat-content {
   display: flex;
@@ -406,14 +394,14 @@ onMounted(() => {
 
 .stat-content .label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--el-text-color-secondary);
   margin-bottom: 4px;
 }
 
 .stat-content .value {
   font-size: 24px;
   font-weight: 700;
-  color: #111827;
+  color: var(--el-text-color-primary);
 }
 
 /* Main Grid */
@@ -424,11 +412,11 @@ onMounted(() => {
 }
 
 .card {
-  background: white;
+  background: var(--el-bg-color);
   border-radius: 16px;
   padding: 24px;
-  border: 1px solid #f3f4f6;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .card-header {
@@ -442,7 +430,7 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
-  color: #374151;
+  color: var(--el-text-color-primary);
 }
 
 /* Table Styles */
@@ -455,8 +443,8 @@ onMounted(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -473,12 +461,12 @@ onMounted(() => {
 .user-info .name {
   font-size: 14px;
   font-weight: 500;
-  color: #111827;
+  color: var(--el-text-color-primary);
 }
 
 .user-info .sub {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--el-text-color-secondary);
 }
 
 .pending-tags {

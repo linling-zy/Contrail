@@ -1,0 +1,42 @@
+<!--score_detail.wxml-->
+<navigation-bar title="分数明细" back="{{true}}" color="black" background="#FFF"></navigation-bar>
+<scroll-view class="scrollarea" scroll-y type="list" style="height: {{scrollViewHeight}}px;">
+<view class="container" style="padding-top: {{paddingTop}}px; padding-bottom: {{paddingBottom}}px;">
+  <!-- Score Summary -->
+  <view class="score-summary">
+    <view class="summary-item">
+      <text class="summary-label">基础分</text>
+      <text class="summary-value">{{baseScore}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="summary-label">总分</text>
+      <text class="summary-value total">{{totalScore}}</text>
+    </view>
+  </view>
+
+  <!-- Score Logs List -->
+  <view class="logs-section">
+    <view class="section-title">分数明细</view>
+    <view wx:if="{{loading}}" class="loading-container">
+      <text>加载中...</text>
+    </view>
+    <view wx:elif="{{scoreLogs.length === 0}}" class="empty-container">
+      <text>暂无分数记录</text>
+    </view>
+    <view wx:else class="logs-list">
+      <view class="log-item" wx:for="{{scoreLogs}}" wx:key="id">
+        <view class="log-left">
+          <view class="log-reason">{{item.reason || '无说明'}}</view>
+          <view class="log-time">{{formatDate(item.create_time)}}</view>
+        </view>
+        <view class="log-right">
+          <text class="log-delta {{item.delta > 0 ? 'positive' : 'negative'}}">
+            {{item.delta > 0 ? '+' : ''}}{{item.delta}}
+          </text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+</scroll-view>
+

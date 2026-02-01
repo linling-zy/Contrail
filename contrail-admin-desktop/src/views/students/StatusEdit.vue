@@ -46,7 +46,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getStudents, getStudentScoreLogs } from '@/api/mock/student'
+import { getStudentDetail, getStudentScoreLogs } from '@/api/student'
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import StudentArchive from './components/StudentArchive.vue'
@@ -72,18 +72,57 @@ const filteredLogs = computed(() => {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getStudents({}) 
-    const target = res.data.list.find(item => item.id === Number(studentId))
-    if (target) {
-      student.value = target
+    // 获取学生详情
+    const res = await getStudentDetail(Number(studentId))
+    
+    if (res.student) {
+      const studentData = res.student
+      // 转换数据格式以适配前端显示
+      student.value = {
+        id: studentData.id,
+        name: studentData.name,
+        studentNo: studentData.student_id || '',
+        idCard: studentData.id_card_no || '',
+        className: studentData.class_name || studentData.department?.class_name || '',
+        classId: studentData.department_id || null,
+        totalScore: studentData.total_score || 0,
+        status: studentData.process_status || {
+          preliminary: studentData.preliminary_status || 'pending',
+          medical: studentData.medical_status || 'pending',
+          political: studentData.political_status || 'pending',
+          admission: studentData.admission_status || 'pending'
+        },
+        teacherEvaluation: '', // 评语需要单独获取或从最新评语中获取
+        certificates: [] // 证书列表需要单独获取
+      }
     } else {
       ElMessage.error('未找到学生档案')
+      return
     }
+    
     // 同时加载积分流水
-    const logsRes = await getStudentScoreLogs(studentId)
-    scoreLogs.value = logsRes.data
+    try {
+      const logsRes = await getStudentScoreLogs(Number(studentId))
+      
+      if (logsRes.code === 200 && logsRes.data) {
+        // 转换数据格式以适配前端显示
+        scoreLogs.value = logsRes.data.items.map(item => ({
+          id: item.id,
+          createTime: item.create_time || item.createTime || '',
+          type: item.type === 1 ? 'manual' : 'system', // 1-人工, 2-系统
+          delta: item.change_amount || item.delta || 0,
+          reason: item.reason || ''
+        }))
+      } else {
+        scoreLogs.value = []
+      }
+    } catch (logError) {
+      console.error('加载积分流水失败:', logError)
+      scoreLogs.value = []
+    }
   } catch (error) {
-    ElMessage.error('加载失败')
+    console.error('加载学生数据失败:', error)
+    ElMessage.error(error.message || '加载失败')
   } finally {
     loading.value = false
   }

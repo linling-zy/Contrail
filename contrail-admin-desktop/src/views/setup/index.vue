@@ -1,5 +1,5 @@
 <template>
-  <div class="login-container">
+  <div class="setup-container">
     <!-- Particle Background -->
     <Particles
       id="tsparticles"
@@ -11,53 +11,81 @@
     <div class="background-overlay"></div>
 
     <div class="content-wrapper">
-      <el-card class="login-card glass-effect">
+      <el-card class="setup-card glass-effect">
         <template #header>
-          <div class="login-header">
+          <div class="setup-header">
             <div class="logo-box">
               <el-icon class="logo-icon"><Promotion /></el-icon>
             </div>
-            <h2 class="title">航迹云管理系统</h2>
-            <p class="subtitle">Welcome Back, Captain</p>
+            <h2 class="title">系统初始化</h2>
+            <p class="subtitle">Initialize Management System</p>
           </div>
         </template>
         
-        <el-form ref="loginFormRef" :model="loginForm" :rules="rules" size="large" class="login-form">
-          <el-form-item prop="username">
+        <el-form 
+          ref="formRef" 
+          :model="form" 
+          :rules="rules" 
+          label-position="top"
+          class="setup-form"
+          @submit.prevent
+        >
+          <el-form-item prop="username" label="管理员账号">
             <el-input 
-              v-model="loginForm.username" 
-              placeholder="请输入用户名" 
+              v-model="form.username" 
+              placeholder="设置登录账号" 
               prefix-icon="User"
+              size="large"
               class="custom-input"
+              autocomplete="off"
             />
           </el-form-item>
           
-          <el-form-item prop="password">
-            <el-input
-              v-model="loginForm.password"
-              type="password"
-              placeholder="请输入密码"
+          <el-form-item prop="name" label="真实姓名">
+            <el-input 
+              v-model="form.name" 
+              placeholder="例如：超级管理员" 
+              prefix-icon="Avatar"
+              size="large"
+              class="custom-input"
+              autocomplete="off"
+            />
+          </el-form-item>
+          
+          <el-form-item prop="password" label="登录密码">
+            <el-input 
+              v-model="form.password" 
+              type="password" 
+              placeholder="设置强度较高的密码" 
               prefix-icon="Lock"
               show-password
-              autocomplete="off"
+              size="large"
               class="custom-input"
-              @keyup.enter="handleLogin"
+              autocomplete="off"
             />
           </el-form-item>
           
-          <div class="form-options">
-            <el-checkbox v-model="rememberMe" class="custom-checkbox">记住我</el-checkbox>
-            <el-link type="primary" :underline="false" class="forgot-link">忘记密码?</el-link>
-          </div>
+          <el-form-item prop="confirmPassword" label="确认密码">
+            <el-input 
+              v-model="form.confirmPassword" 
+              type="password" 
+              placeholder="再次输入密码确认" 
+              prefix-icon="Lock"
+              show-password
+              size="large"
+              class="custom-input"
+              autocomplete="off"
+            />
+          </el-form-item>
 
           <el-form-item>
             <el-button 
               type="primary" 
               :loading="loading" 
-              class="login-button" 
-              @click="handleLogin"
+              class="setup-button" 
+              @click="handleSubmit"
             >
-              {{ loading ? 'Signing In...' : '登 录' }}
+              {{ loading ? 'Initializing...' : '完成初始化' }}
             </el-button>
           </el-form-item>
         </el-form>
@@ -73,133 +101,96 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '@/store/user'
+import { initializeSystem } from '@/api/system'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Promotion } from '@element-plus/icons-vue'
-import { loadSlim } from "tsparticles-slim"; // loads tsparticles-slim
+import { User, Lock, Avatar, Promotion } from '@element-plus/icons-vue'
+import { loadSlim } from "tsparticles-slim";
 
 const router = useRouter()
-const userStore = useUserStore()
-
-const loginFormRef = ref(null)
+const formRef = ref(null)
 const loading = ref(false)
-const rememberMe = ref(false)
 
-const loginForm = reactive({
-  username: '',
-  password: ''
+const form = reactive({
+  username: 'admin',
+  name: '超级管理员',
+  password: '',
+  confirmPassword: ''
 })
 
-const rules = {
-  username: [{ required: true, message: '请输入您的飞行代号 (用户名)', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入通行密钥 (密码)', trigger: 'blur' }]
+const validatePass2 = (rule, value, callback) => {
+  if (value === '') {
+    callback(new Error('请再次输入密码'))
+  } else if (value !== form.password) {
+    callback(new Error('两次输入密码不一致'))
+  } else {
+    callback()
+  }
 }
 
-/* Particles Configuration */
+const rules = {
+  username: [{ required: true, message: '请输入管理员账号', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于 6 位', trigger: 'blur' }
+  ],
+  confirmPassword: [{ validator: validatePass2, trigger: 'blur' }]
+}
+
+/* Particles Configuration - Same as Login */
 const particlesInit = async (engine) => {
   await loadSlim(engine);
 };
 
 const particlesOptions = {
-  background: {
-    color: {
-      value: "transparent",
-    },
-  },
+  background: { color: { value: "transparent" } },
   fpsLimit: 120,
   interactivity: {
     events: {
-      onClick: {
-        enable: true,
-        mode: "push",
-      },
-      onHover: {
-        enable: true,
-        mode: "grab",
-      },
+      onClick: { enable: true, mode: "push" },
+      onHover: { enable: true, mode: "grab" },
       resize: true,
     },
     modes: {
-      bubble: {
-        distance: 400,
-        duration: 2,
-        opacity: 0.8,
-        size: 40,
-      },
-      push: {
-        quantity: 4,
-      },
-      repulse: {
-        distance: 200,
-        duration: 0.4,
-      },
-      grab: {
-        distance: 140,
-        links: {
-          opacity: 1
-        }
-      }
+      bubble: { distance: 400, duration: 2, opacity: 0.8, size: 40 },
+      push: { quantity: 4 },
+      repulse: { distance: 200, duration: 0.4 },
+      grab: { distance: 140, links: { opacity: 1 } }
     },
   },
   particles: {
-    color: {
-      value: "#ffffff",
-    },
-    links: {
-      color: "#ffffff",
-      distance: 150,
-      enable: true,
-      opacity: 0.2, // Subtle lines
-      width: 1,
-    },
-    move: {
-      direction: "none",
-      enable: true,
-      outModes: {
-        default: "bounce",
-      },
-      random: false,
-      speed: 1, // Slow movement
-      straight: false,
-    },
-    number: {
-      density: {
-        enable: true,
-        area: 800,
-      },
-      value: 60,
-    },
-    opacity: {
-      value: 0.3,
-    },
-    shape: {
-      type: "circle",
-    },
-    size: {
-      value: { min: 1, max: 3 },
-    },
+    color: { value: "#ffffff" },
+    links: { color: "#ffffff", distance: 150, enable: true, opacity: 0.2, width: 1 },
+    move: { enable: true, speed: 1, direction: "none", random: false, straight: false, outModes: { default: "bounce" } },
+    number: { density: { enable: true, area: 800 }, value: 60 },
+    opacity: { value: 0.3 },
+    shape: { type: "circle" },
+    size: { value: { min: 1, max: 3 } },
   },
   detectRetina: true,
 };
 
-const handleLogin = async () => {
-  if (!loginFormRef.value) return
-  
-  await loginFormRef.value.validate(async (valid) => {
+const handleSubmit = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
-      // Simulator delay for effect
-      setTimeout(async () => {
-        try {
-          await userStore.login(loginForm.username, loginForm.password)
-          ElMessage.success('Welcome back, Captain!')
-          router.push('/dashboard')
-        } catch (error) {
-          ElMessage.error(error.message || 'Authentication Failed')
-        } finally {
-          loading.value = false
-        }
-      }, 800)
+      try {
+        await initializeSystem({
+          username: form.username,
+          password: form.password,
+          name: form.name
+        })
+        
+        ElMessage.success('系统初始化成功！请登录')
+        // Force refresh to clear any init verification guards
+        window.location.href = '/login'
+      } catch (error) {
+        console.error('初始化失败:', error)
+        ElMessage.error(error.message || '初始化失败，请重试')
+      } finally {
+        loading.value = false
+      }
     }
   })
 }
@@ -208,7 +199,7 @@ const handleLogin = async () => {
 <style scoped lang="scss">
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700&display=swap');
 
-.login-container {
+.setup-container {
   height: 100vh;
   width: 100%;
   position: relative;
@@ -220,14 +211,14 @@ const handleLogin = async () => {
   background-size: cover;
   font-family: 'Exo 2', sans-serif;
   
-  /* Force Light Mode Variables locally */
+  /* Force Light Mode Variables locally for consistent dark theme look */
   --el-color-primary: #00a8ff;
   --el-text-color-primary: #ffffff;
   --el-text-color-regular: #dcdde1;
   --el-text-color-placeholder:rgba(255, 255, 255, 0.5);
   --el-border-color: rgba(255, 255, 255, 0.2);
   --el-bg-color: transparent;
-  color-scheme: dark; /* Trick browser to give light autofill text? No, use custom fill */
+  color-scheme: dark; 
 
   .particles-bg {
     position: absolute;
@@ -259,11 +250,11 @@ const handleLogin = async () => {
   }
 
   /* Glass Card */
-  .login-card {
+  .setup-card {
     width: 100%;
-    max-width: 440px;
+    max-width: 500px; /* Slightly wider for the form */
     border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(4, 21, 39, 0.4); /* Darker glass for contrast */
+    background: rgba(4, 21, 39, 0.4); 
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-radius: 20px;
@@ -279,7 +270,7 @@ const handleLogin = async () => {
   }
 }
 
-.login-header {
+.setup-header {
   text-align: center;
   margin-bottom: 20px;
   margin-top: 20px;
@@ -320,8 +311,13 @@ const handleLogin = async () => {
   }
 }
 
-.login-form {
+.setup-form {
   padding: 0 20px 20px;
+
+  :deep(.el-form-item__label) {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 500;
+  }
 
   :deep(.el-form-item) {
     margin-bottom: 24px;
@@ -330,7 +326,7 @@ const handleLogin = async () => {
   /* Custom Input Styles */
   .custom-input {
     :deep(.el-input__wrapper) {
-      background-color: rgba(255, 255, 255, 0.05); /* Very subtle fill */
+      background-color: rgba(255, 255, 255, 0.05); 
       box-shadow: none !important;
       border-bottom: 2px solid rgba(255, 255, 255, 0.1);
       border-radius: 4px 4px 0 0;
@@ -358,7 +354,7 @@ const handleLogin = async () => {
     }
   }
   
-  /* Fix Autofill specifically for this dark theme card */
+  /* Fix Autofill: remove shadow */
   :deep(.el-input__wrapper) input:-webkit-autofill {
       -webkit-text-fill-color: #ffffff !important;
       caret-color: white;
@@ -366,31 +362,7 @@ const handleLogin = async () => {
   }
 }
 
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-  
-  .custom-checkbox {
-    color: rgba(255,255,255,0.8);
-    :deep(.el-checkbox__inner) {
-      background: transparent;
-      border-color: rgba(255,255,255,0.4);
-    }
-    :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
-      background-color: #00a8ff;
-      border-color: #00a8ff;
-    }
-  }
-  
-  .forgot-link {
-    color: rgba(255,255,255,0.6);
-    &:hover { color: #00a8ff; }
-  }
-}
-
-.login-button {
+.setup-button {
   width: 100%;
   height: 50px;
   border-radius: 25px;
@@ -402,6 +374,7 @@ const handleLogin = async () => {
   text-transform: uppercase;
   box-shadow: 0 4px 15px rgba(0, 168, 255, 0.4);
   transition: all 0.3s;
+  margin-top: 10px;
   
   &:hover {
     transform: translateY(-2px);
@@ -423,7 +396,7 @@ const handleLogin = async () => {
 
 /* Mobile Responsive */
 @media (max-width: 480px) {
-  .login-card {
+  .setup-card {
     max-width: 100%;
     margin: 0 10px;
   }

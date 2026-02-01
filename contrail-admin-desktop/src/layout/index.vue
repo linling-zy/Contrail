@@ -31,7 +31,7 @@ import { Sidebar, Navbar, AppMain } from './components'
 .sidebar-container {
   transition: width 0.28s;
   width: 210px;
-  background-color: #304156;
+  background-color: var(--el-bg-color);
   height: 100%;
   position: fixed;
   font-size: 0;
@@ -40,6 +40,8 @@ import { Sidebar, Navbar, AppMain } from './components'
   left: 0;
   z-index: 1001;
   overflow: hidden;
+  box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
+  transition: background-color 0.3s;
 }
 
 .main-container {
