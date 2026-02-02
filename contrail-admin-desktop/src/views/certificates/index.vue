@@ -188,7 +188,16 @@ const getList = async () => {
           status: item.status, // 0:待审, 1:通过, 2:驳回
           imgUrl: item.imgUrl || '',
           uploadTime: item.upload_time || item.uploadTime || '',
-          rejectReason: item.reject_reason || item.rejectReason || ''
+          rejectReason: item.reject_reason || item.rejectReason || '',
+          extraData: (() => {
+             try {
+               const raw = item.extraData || item.extra_data || '{}';
+               return typeof raw === 'string' ? JSON.parse(raw) : raw;
+             } catch (e) {
+               console.warn('Failed to parse extraData for cert ' + item.id, e);
+               return {};
+             }
+          })()
         }
       })
     } else if (res.data && res.data.list) {

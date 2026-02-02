@@ -1,44 +1,53 @@
 <!--index.wxml-->
 <scroll-view class="scrollarea" scroll-y type="list" style="height: {{scrollViewHeight}}px; padding-top: {{paddingTop}}px;">
-<view class="container" style="padding-bottom: {{paddingBottom}}px;">
-  <!-- Section 1: Score -->
-  <view class="score-section">
-    <view class="score-circle" bindtap="onScoreTap">
-      <text class="score-num">{{score}}</text>
-      <text class="score-label">分</text>
+  <view class="container" style="padding-bottom: {{paddingBottom}}px;">
+    
+    <!-- 1. Hero Section (Glass Card) -->
+    <view class="glass-card hero-section" bindtap="onScoreTap">
+      <view class="hero-left">
+        <text class="hero-score">{{score}}</text>
+        <text class="hero-label">当前总积分</text>
+        <text class="hero-update">上次更新：{{updateDate || '2023-10-25'}}</text>
+      </view>
+      <view class="hero-right">
+        <!-- Trophy Icon -->
+        <view class="trophy-icon">🏆</view>
+      </view>
     </view>
-  </view>
 
-  <!-- Section 2: Status Grid -->
-  <view class="status-section">
-    <view class="status-grid">
-      <block wx:for="{{statusList}}" wx:key="name">
-        <view class="status-item">
-          <view class="status-icon {{item.status}}">
-            <block wx:if="{{item.status === 'pending'}}">
-              <text class="dots">...</text>
-            </block>
-            <block wx:elif="{{item.status === 'qualified'}}">
-              <icon type="success_no_circle" size="30" color="#4caf50"></icon>
-            </block>
-            <block wx:elif="{{item.status === 'unqualified'}}">
-              <icon type="clear" size="30" color="#f44336"></icon>
-            </block>
+    <!-- 2. Status Section (Glass Card) -->
+    <view class="glass-card status-section">
+      <view class="stepper-container">
+        <block wx:for="{{statusList}}" wx:key="name">
+          <view class="step-item {{item.status}}">
+            <view class="step-icon-wrapper">
+              <view class="step-icon">
+                <block wx:if="{{item.name === '初试'}}">📄</block>
+                <block wx:elif="{{item.name === '体检'}}">🩺</block>
+                <block wx:elif="{{item.name === '政审'}}">🛡️</block>
+                <block wx:elif="{{item.name === '录取'}}">✈️</block>
+                <block wx:else>📍</block>
+              </view>
+              <!-- Status Indicator Badge -->
+              <view class="status-badge" wx:if="{{item.status === 'qualified'}}">
+                 <icon type="success_no_circle" size="10" color="#fff"></icon>
+              </view>
+            </view>
+            <text class="step-label">{{item.name}}</text>
           </view>
-          <text class="status-name">{{item.name}}</text>
-          <text class="status-label">{{item.label}}</text>
-        </view>
-      </block>
+          <!-- Connector Line -->
+          <view class="step-connector" wx:if="{{index < statusList.length - 1}}"></view>
+        </block>
+      </view>
     </view>
-  </view>
 
-  <!-- Section 3: Comments -->
-  <view class="comment-section" bindtap="onCommentTap">
-    <view class="section-title">评语</view>
-    <view class="comment-content">
-      <text max-lines="3" text-overflow="ellipsis">{{comment || '暂无评语'}}</text>
+    <!-- 3. Comments Section (Glass Bubble) -->
+    <view class="glass-card comment-section" bindtap="onCommentTap">
+      <view class="quote-mark">“</view>
+      <view class="comment-content">
+        <text class="comment-text">{{displayComment || '暂无评语'}}</text>
+      </view>
     </view>
-    <view class="comment-hint">{{comment ? '点击查看全部' : ' '}}</view>
+
   </view>
-</view>
 </scroll-view>

@@ -28,3 +28,4 @@ def downgrade():
     with op.batch_alter_table('departments', schema=None) as batch_op:
         batch_op.drop_column('base_score')
 
+

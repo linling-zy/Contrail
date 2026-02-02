@@ -103,6 +103,39 @@
             <span>证书已核验入库，积分已发放</span>
         </div>
 
+        <!-- Dynamic Specs Section -->
+        <div v-if="displayItems.length > 0" class="specs-section">
+          <div class="section-label">详细信息</div>
+          <div class="details-grid" :class="gridClass">
+             <div 
+               v-for="(item, idx) in displayItems" 
+               :key="idx" 
+               class="detail-cell"
+               :class="{ 'highlight': item.highlight, 'full-width': item.fullWidth }"
+             >
+                <div class="cell-label">
+                  <el-icon v-if="item.icon" class="cell-icon"><component :is="item.icon" /></el-icon>
+                  {{ item.label }}
+                </div>
+                <div class="cell-value">
+                   <template v-if="item.tags">
+                      <el-tag 
+                        v-for="(tag, tIdx) in item.tags" 
+                        :key="tIdx" 
+                        size="small" 
+                        effect="dark"
+                        :type="tag.type || 'primary'"
+                        class="detail-tag"
+                      >
+                        {{ tag.text }}
+                      </el-tag>
+                   </template>
+                   <span v-else>{{ item.value }}</span>
+                </div>
+             </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -111,8 +144,10 @@
 <script setup>
 import { 
   Close, Check, Select, CloseBold, Warning, WarningFilled, 
-  ZoomIn, User, OfficeBuilding, Timer, CircleCheckFilled 
+  ZoomIn, User, OfficeBuilding, Timer, CircleCheckFilled,
+  Trophy, Medal, Management, DataAnalysis, Flag
 } from '@element-plus/icons-vue'
+import { computed } from 'vue'
 
 const props = defineProps({
   data: {
@@ -133,6 +168,78 @@ const getStatusText = (status) => {
   const map = { 0: '待审核', 1: '已通过', 2: '已驳回' }
   return map[status]
 }
+
+// *** Dynamic Display Logic ***
+const displayItems = computed(() => {
+  const extra = props.data.extraData || {};
+  const list = [];
+  
+  // Helper to check existence
+  const has = (key) => extra[key] !== undefined && extra[key] !== null && extra[key] !== '';
+
+  // Type A: CET (English 4/6) - Check 'score'
+  if (has('score')) {
+    list.push({ 
+      label: '考试分数', 
+      value: extra.score, 
+      highlight: true, 
+      icon: 'DataAnalysis' 
+    });
+  }
+  
+  // Type B: IELTS - Check 'listening' or 'reading' (Sub-scores)
+  else if (has('listening') || has('reading')) {
+    if (has('total')) {
+       list.push({ label: '总成绩', value: extra.total, highlight: true, icon: 'Trophy', fullWidth: true });
+    }
+    const subs = [
+      { k: 'listening', l: '听力' }, { k: 'reading', l: '阅读' },
+      { k: 'writing', l: '写作' }, { k: 'speaking', l: '口语' }
+    ];
+    subs.forEach(sub => {
+       if (has(sub.k)) list.push({ label: sub.l, value: extra[sub.k] });
+    });
+  }
+  
+  // Type C: Job Experience - Check 'position'
+  else if (has('position')) {
+    list.push({ label: '担任职务', value: extra.position, highlight: true, icon: 'Management', fullWidth: true });
+    if (has('date')) {
+      list.push({ label: '任职时间', value: extra.date, icon: 'Timer', fullWidth: true });
+    }
+    if (has('award')) {
+      list.push({ label: '集体获奖', value: extra.award, icon: 'Medal' });
+    }
+  }
+  
+  // Type D: Awards - Check 'rank' or 'level'
+  else if (has('rank') || has('level') || has('organizer')) {
+    // Combine Level and Rank into Tags
+    const tags = [];
+    if (has('level')) tags.push({ text: extra.level, type: 'danger' });
+    if (has('rank')) tags.push({ text: extra.rank, type: 'warning' });
+    
+    if (tags.length > 0) {
+      list.push({ label: '获奖等级', tags: tags, icon: 'Trophy', fullWidth: true });
+    }
+    
+    if (has('organizer')) {
+      list.push({ label: '主办单位', value: extra.organizer, icon: 'Flag', fullWidth: true });
+    }
+    if (has('date')) {
+      list.push({ label: '获奖时间', value: extra.date, icon: 'Timer' });
+    }
+  }
+  
+  return list;
+});
+
+const gridClass = computed(() => {
+   // Adjust grid layout based on item count for prettier display
+   const count = displayItems.value.length;
+   if (count <= 1) return 'single-col';
+   return ''; // Default 2 cols
+});
 </script>
 
 <style scoped lang="scss">
@@ -378,6 +485,67 @@ $shadow: var(--el-box-shadow-light);
   font-weight: 500;
   font-size: 14px;
   border: 1px dashed var(--el-color-success-light-5);
+}
+
+.specs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  
+  .details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    
+    &.single-col { grid-template-columns: 1fr; }
+    
+    .detail-cell {
+      background: var(--el-fill-color-light);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border: 1px solid transparent;
+      
+      &.full-width { grid-column: span 2; }
+      
+      &.highlight {
+        background: var(--el-color-primary-light-9);
+        border-color: var(--el-color-primary-light-8);
+        
+        .cell-value {
+           font-size: 24px;
+           color: var(--el-color-primary);
+           font-weight: 800;
+        }
+      }
+      
+      .cell-label {
+        font-size: 12px;
+        color: var(--el-text-color-secondary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        
+        .cell-icon { font-size: 14px; opacity: 0.8; }
+      }
+      
+      .cell-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--el-text-color-primary);
+        word-break: break-word;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      
+      .detail-tag {
+        font-weight: 600;
+      }
+    }
+  }
 }
 
 </style>

@@ -13,6 +13,10 @@
                   <span class="label">学号:</span> <span class="val">{{ studentData?.studentNo }}</span>
                   <el-divider direction="vertical" />
                   <span class="label">身份证:</span> <span class="val">{{ studentData?.idCard }}</span>
+                  <el-divider direction="vertical" />
+                  <span class="label">学分:</span> <span class="val">{{ studentData?.credits || '--' }}</span>
+                  <el-divider direction="vertical" />
+                  <span class="label">绩点:</span> <span class="val">{{ studentData?.gpa || '--' }}</span>
                </div>
             </div>
             
@@ -32,6 +36,18 @@
                </el-form-item>
                <el-form-item label="身份证">
                   <el-input v-model="profileForm.idCard" />
+               </el-form-item>
+               <el-form-item label="学分">
+                  <el-input-number v-model="profileForm.credits" :min="0" :step="0.5" controls-position="right" style="width: 100px;" />
+               </el-form-item>
+               <el-form-item label="绩点">
+                  <el-input-number v-model="profileForm.gpa" :min="0" :max="5" :step="0.1" controls-position="right" style="width: 100px;" />
+               </el-form-item>
+               <el-form-item label="籍贯">
+                  <el-input v-model="profileForm.birthplace" style="width: 120px;" />
+               </el-form-item>
+               <el-form-item label="电话">
+                  <el-input v-model="profileForm.phone" style="width: 140px;" />
                </el-form-item>
             </el-form>
          </div>
@@ -195,7 +211,11 @@ const formStatus = reactive({
 const profileForm = reactive({
     name: '',
     studentNo: '',
-    idCard: ''
+    idCard: '',
+    credits: null,
+    gpa: null,
+    birthplace: '',
+    phone: ''
 })
 
 const scoreDialogVisible = ref(false)
@@ -258,6 +278,10 @@ watch(() => props.studentData, (newVal) => {
      profileForm.name = newVal.name || ''
      profileForm.studentNo = newVal.studentNo || newVal.student_id || ''
      profileForm.idCard = newVal.idCard || newVal.id_card_no || ''
+     profileForm.credits = newVal.credits || null
+     profileForm.gpa = newVal.gpa || null
+     profileForm.birthplace = newVal.birthplace || ''
+     profileForm.phone = newVal.phone || ''
   }
 }, { immediate: true, deep: true })
 
@@ -270,7 +294,11 @@ const handleSave = async () => {
       // 基本信息
       base_info: {
         name: profileForm.name || undefined,
-        student_id: profileForm.studentNo || undefined
+        student_id: profileForm.studentNo || undefined,
+        credits: profileForm.credits !== null && profileForm.credits !== '' ? profileForm.credits : undefined,
+        gpa: profileForm.gpa !== null && profileForm.gpa !== '' ? profileForm.gpa : undefined,
+        birthplace: profileForm.birthplace || undefined,
+        phone: profileForm.phone || undefined
         // department_id 和 base_score 如果需要更新，可以从 studentData 中获取或添加输入框
       },
       // 阶段状态（将前端的 'failed' 转换为后端的 'unqualified'）

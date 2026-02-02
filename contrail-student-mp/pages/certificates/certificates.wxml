@@ -4,50 +4,77 @@
 </view>
 
 <!-- Main Content Area -->
-<scroll-view class="content-scroll" scroll-y style="padding-top: {{paddingTop}}px; height: {{scrollViewHeight}}px;">
-  <view class="cert-list">
-    <!-- Loading State -->
-    <block wx:if="{{isLoading}}">
-      <view class="loading-state">
-        <text>加载中...</text>
-      </view>
-    </block>
-
-    <!-- List Items -->
-    <block wx:elif="{{certificates.length > 0}}">
-      <view class="cert-card" wx:for="{{certificates}}" wx:key="id" bindtap="onItemClick" data-item="{{item}}">
-        <!-- Left: Thumbnail/Icon -->
-        <view class="card-thumb">
-          <image wx:if="{{item.thumb}}" src="{{item.thumb}}" mode="aspectFill" class="thumb-img"></image>
-          <image wx:else src="/images/cert_default.png" mode="aspectFit" class="thumb-icon"></image>
-        </view>
-        
-        <!-- Center: Info -->
-        <view class="card-info">
-          <text class="cert-title">{{item.title}}</text>
-        </view>
-
-        <!-- Right: Status Badge -->
-        <view class="card-status status-{{item.status}}">
-          <text>{{item.statusLabel}}</text>
+<scroll-view class="content-scroll" scroll-y type="list" style="padding-top: {{paddingTop}}px; height: {{scrollViewHeight}}px;">
+  <!-- Action Zone: Bento Grid -->
+  <view class="header-section">
+    <view class="bento-grid">
+      <view class="bento-card {{item.styleClass}}" 
+            style="background: {{item.gradient}}; box-shadow: 0 10rpx 24rpx {{item.shadow}};"
+            wx:for="{{entryList}}" wx:key="type" bindtap="onEntryTap" data-item="{{item}}">
+        <view class="card-watermark">{{item.watermark}}</view>
+        <view class="card-content">
+          <view class="card-name">{{item.name}}</view>
+          <view class="card-arrow">→</view>
         </view>
       </view>
-    </block>
+    </view>
+  </view>
 
-    <!-- Empty State -->
-    <block wx:else>
-      <view class="empty-state">
-        <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
-        <text class="empty-text">暂无证书</text>
+  <!-- List Section -->
+  <view class="list-section">
+    <!-- Divider & Filter -->
+    <view class="section-header">
+      <text class="section-title">申请记录</text>
+      <!-- Filter moved here -->
+      <view class="inline-filter">
+        <view class="filter-chip {{activeFilter === 'all' ? 'active' : ''}}" bindtap="onFilterClick" data-type="all">全部</view>
+        <view class="filter-chip {{activeFilter === 'auditing' ? 'active' : ''}}" bindtap="onFilterClick" data-type="auditing">审核中</view>
+        <view class="filter-chip {{activeFilter === 'passed' ? 'active' : ''}}" bindtap="onFilterClick" data-type="passed">已通过</view>
+        <view class="filter-chip {{activeFilter === 'rejected' ? 'active' : ''}}" bindtap="onFilterClick" data-type="rejected">已驳回</view>
       </view>
-    </block>
-    
-    <!-- Bottom Spacer for FAB -->
-    <view class="list-spacer"></view>
+    </view>
+
+    <!-- Certificate List -->
+    <view class="cert-list">
+      <!-- Loading State -->
+      <block wx:if="{{isLoading}}">
+        <view class="loading-state">
+          <text>加载中...</text>
+        </view>
+      </block>
+
+      <!-- List Items -->
+      <block wx:elif="{{certificates.length > 0}}">
+        <view class="list-item" wx:for="{{certificates}}" wx:key="id" bindtap="onItemClick" data-item="{{item}}">
+            <view class="item-left">
+                <view class="item-icon-box">
+                    <image wx:if="{{item.thumb}}" src="{{item.thumb}}" mode="aspectFill" class="item-thumb"></image>
+                    <view wx:else class="default-icon">{{item.type ? item.title[0] : 'C'}}</view>
+                </view>
+                <view class="item-info">
+                    <view class="item-title">{{item.title}}</view>
+                    <view class="item-meta">
+                        <text class="item-date">{{item.date || '2023-11-20'}}</text>
+                        <text wx:if="{{item.type}}" class="item-tag">{{item.type}}</text>
+                    </view>
+                </view>
+            </view>
+            <view class="item-status status-{{item.status}}">
+                {{item.statusLabel}}
+            </view>
+        </view>
+      </block>
+
+      <!-- Empty State -->
+      <block wx:else>
+        <view class="empty-state">
+          <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
+          <text class="empty-text">暂无证书</text>
+        </view>
+      </block>
+      
+      <!-- Spacer -->
+      <view class="list-spacer"></view>
+    </view>
   </view>
 </scroll-view>
-
-<!-- Floating Action Button (FAB) -->
-<view class="fab-btn" bindtap="onUpload">
-  <text class="fab-icon">+</text>
-</view>

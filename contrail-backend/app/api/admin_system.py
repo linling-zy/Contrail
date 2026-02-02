@@ -15,6 +15,8 @@ from app.utils.permission import get_admin_accessible_query
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 
 @admin_bp.route('/admins', methods=['POST'])
 @super_admin_required
@@ -540,6 +542,18 @@ def create_department():
     
     try:
         db.session.add(department)
+        db.session.flush()  # 获取 department.id
+        
+        # 自动关联默认的5种证书类型
+        default_cert_type_names = ['英语四级', '英语六级', '雅思IELTS', '任职情况', '获奖情况']
+        default_cert_types = CertificateType.query.filter(
+            CertificateType.name.in_(default_cert_type_names)
+        ).all()
+        
+        if default_cert_types:
+            department.certificate_types.extend(default_cert_types)
+            logger.info(f"[部门创建] 自动关联 {len(default_cert_types)} 个默认证书类型到部门 {department.id}")
+        
         db.session.commit()
         return jsonify({
             'message': '部门创建成功',

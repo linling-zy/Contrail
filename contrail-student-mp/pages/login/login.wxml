@@ -1,25 +1,24 @@
 <view class="container" style="padding-top: {{statusBarHeight + navBarHeight}}px;">
-  <!-- Custom Navigation Bar (Transparent/Fixed) -->
-  <view class="custom-nav" style="height: {{navBarHeight}}px; top: {{statusBarHeight}}px;">
-    <!-- Optional: Back button or Title here if needed -->
-  </view>
+  <!-- Immersive Background Elements -->
+  <view class="bg-decoration sun"></view>
+  <view class="bg-watermark">CONTRAIL</view>
 
   <view class="content-wrapper">
+    <!-- Header -->
     <view class="header">
-        <image class="logo" src="/assets/logo.png" mode="aspectFit" wx:if="{{false}}"></image>
-        <view class="title">航迹云</view>
-        <view class="subtitle">Contrail Cloud</view>
+        <view class="title">航迹云 · 飞行学员管理</view>
+        <view class="subtitle">Contrail Cloud Flight Academy</view>
     </view>
 
-    <view class="form">
+    <!-- Glassmorphism Card -->
+    <view class="glass-card">
         <view class="input-group">
-        <text class="label">身份证号</text>
-        <input class="input" type="text" placeholder="请输入身份证号" placeholder-class="placeholder" bindinput="onInputIdCardNo" value="{{idCardNo}}" />
+          <!-- Removed label for cleaner look, added icon placeholders if needed later, kept text for now as per modern spec usually implies icons or floating labels, adhering to spec 'Modern Inputs' -->
+          <input class="modern-input" type="text" placeholder="身份证号" placeholder-class="placeholder" bindinput="onInputIdCardNo" value="{{idCardNo}}" />
         </view>
         
         <view class="input-group">
-        <text class="label">密码</text>
-        <input class="input" type="password" placeholder="请输入密码" placeholder-class="placeholder" bindinput="onInputPassword" value="{{password}}" />
+          <input class="modern-input" type="password" placeholder="密码" placeholder-class="placeholder" bindinput="onInputPassword" value="{{password}}" />
         </view>
 
         <button class="login-btn" bindtap="onLogin">登录</button>

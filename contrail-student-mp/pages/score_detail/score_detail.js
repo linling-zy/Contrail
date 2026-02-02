@@ -14,7 +14,7 @@ Page({
         const windowInfo = wx.getWindowInfo();
         const platform = (wx.getDeviceInfo() || wx.getSystemInfoSync()).platform;
         const isAndroid = platform === 'android';
-        
+
         // 导航栏组件高度：iOS 44px, Android 48px，加上状态栏高度
         const statusBarHeight = windowInfo.statusBarHeight || windowInfo.safeArea?.top || 0;
         const navBarContentHeight = isAndroid ? 48 : 44;
@@ -41,10 +41,17 @@ Page({
         const { get } = require('../../utils/request');
         try {
             const res = await get('/student/score');
+
+            // Format logs with date string
+            const logs = (res.score_logs || []).map(item => ({
+                ...item,
+                formatted_time: this.formatDate(item.create_time)
+            }));
+
             this.setData({
                 baseScore: res.base_score || 0,
                 totalScore: res.total_score || 0,
-                scoreLogs: res.score_logs || []
+                scoreLogs: logs
             });
         } catch (e) {
             wx.showToast({
