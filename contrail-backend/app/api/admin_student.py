@@ -1203,6 +1203,7 @@ def update_student_archive(student_id):
             # 可更新的基础字段
             if 'name' in base_info:
                 student.name = base_info['name']
+
             if 'student_id' in base_info:
                 # 学号唯一性检查（如果修改了学号）
                 new_student_id = base_info['student_id']
@@ -1212,6 +1213,7 @@ def update_student_archive(student_id):
                     if existing_user and existing_user.id != student_id:
                         return jsonify({'code': 400, 'message': f'学号 {new_student_id} 已被其他学生使用'}), 400
                 student.student_id = new_student_id
+
             if 'department_id' in base_info:
                 dept_id = base_info['department_id']
                 # 验证部门是否存在
@@ -1225,11 +1227,46 @@ def update_student_archive(student_id):
                         if dept_id not in managed_dept_ids:
                             return jsonify({'code': 403, 'message': '无权将学生分配到该部门'}), 403
                 student.department_id = dept_id
+
             if 'base_score' in base_info:
                 base_score = base_info['base_score']
                 if not isinstance(base_score, int):
                     return jsonify({'code': 400, 'message': 'base_score 必须是整数'}), 400
                 student.base_score = base_score
+
+            # 学分 / 绩点 / 籍贯 / 联系电话等补充信息
+            if 'credits' in base_info:
+                value = base_info['credits']
+                if value is None or value == '':
+                    student.credits = None
+                else:
+                    try:
+                        student.credits = float(value)
+                    except (TypeError, ValueError):
+                        return jsonify({'code': 400, 'message': 'credits 必须是数字'}), 400
+
+            if 'gpa' in base_info:
+                value = base_info['gpa']
+                if value is None or value == '':
+                    student.gpa = None
+                else:
+                    try:
+                        gpa = float(value)
+                    except (TypeError, ValueError):
+                        return jsonify({'code': 400, 'message': 'gpa 必须是数字'}), 400
+                    # 可选：限制 GPA 合理范围
+                    if gpa < 0 or gpa > 5:
+                        return jsonify({'code': 400, 'message': 'gpa 必须在 0~5 之间'}), 400
+                    student.gpa = gpa
+
+            if 'birthplace' in base_info:
+                bp = (base_info['birthplace'] or '').strip()
+                student.birthplace = bp or None
+
+            if 'phone' in base_info:
+                phone = (base_info['phone'] or '').strip()
+                # 如需更严格的校验可在此补充
+                student.phone = phone or None
         
         # 2. 更新四阶段状态（直接更新到 User 表的字段）
         process_status = data.get('process_status', {})

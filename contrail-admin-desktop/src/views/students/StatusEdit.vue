@@ -93,7 +93,11 @@ const loadData = async () => {
           admission: studentData.admission_status || 'pending'
         },
         teacherEvaluation: '', // 评语需要单独获取或从最新评语中获取
-        certificates: [] // 证书列表需要单独获取
+        certificates: [], // 证书列表需要单独获取
+        credits: studentData.credits || null,
+        gpa: studentData.gpa || null,
+        birthplace: studentData.birthplace || '',
+        phone: studentData.phone || ''
       }
     } else {
       ElMessage.error('未找到学生档案')

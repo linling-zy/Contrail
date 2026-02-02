@@ -1,9 +1,13 @@
 /* Pages background */
 page {
-  background-color: #f5f7fa;
+  /* Immersive Background: Clear Blue Sky to Cloud White */
+  background: linear-gradient(to bottom, #E0F2FF, #FFFFFF);
   height: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, role="presentation", Arial, sans-serif;
 }
 
 .container {
@@ -12,117 +16,143 @@ page {
   flex-direction: column;
   padding: 0 40rpx;
   box-sizing: border-box;
+  position: relative;
+  z-index: 2;
 }
 
-.custom-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 100;
+/* Background Decoration: Sun/Cloud */
+.bg-decoration.sun {
+  position: absolute;
+  top: -100rpx;
+  right: -100rpx;
+  width: 600rpx;
+  height: 600rpx;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0));
+  border-radius: 50%;
+  filter: blur(40px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Branding: Watermark */
+.bg-watermark {
+  position: absolute;
+  top: 10%;
+  left: -40rpx;
+  font-size: 160rpx;
+  font-weight: 900;
+  color: #000000;
+  opacity: 0.05;
+  z-index: 0;
+  pointer-events: none;
+  font-style: italic;
+  letter-spacing: -4rpx;
 }
 
 .content-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding-bottom: 60rpx; /* Slight offset to visual center */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  padding-bottom: 60rpx;
 }
 
 /* Header Section */
 .header {
-  margin-bottom: 80rpx;
-  text-align: center;
-}
-
-.logo {
-  width: 160rpx;
-  height: 160rpx;
-  margin-bottom: 20rpx;
-  border-radius: 20rpx;
+  margin-bottom: 60rpx;
+  padding-left: 10rpx;
 }
 
 .title {
   font-size: 48rpx;
   font-weight: bold;
-  color: #0056b3; /* Darker Blue */
-  margin-bottom: 10rpx;
+  color: #0F172A; /* Darker, cleaner text */
+  margin-bottom: 12rpx;
+  text-shadow: 0 2rpx 4rpx rgba(255, 255, 255, 0.8);
 }
 
 .subtitle {
   font-size: 28rpx;
-  color: #7f8c8d;
+  color: #007AFF; /* Tech Blue */
   letter-spacing: 2rpx;
+  font-weight: 500;
+  text-transform: uppercase;
 }
 
-/* Form Section */
-.form {
+/* Glassmorphism Card */
+.glass-card {
   width: 100%;
-  background-color: #ffffff;
-  padding: 40rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
-  box-sizing: border-box; /* Ensure padding doesn't affect width */
+  background: rgba(255, 255, 255, 0.9); /* High opacity for cleaner look or 0.7 for more glass */
+  /* backdrop-filter: blur(20px);  Note: backdrop-filter might have limited support in some mini-program envs, mostly iOS supports it well. Fallback to solid/translucent color is handled by background */
+  padding: 60rpx 40rpx;
+  border-radius: 32rpx;
+  box-shadow: 0 20rpx 60rpx rgba(0, 122, 255, 0.15); /* Strong diffused shadow */
+  box-sizing: border-box;
 }
 
 .input-group {
   margin-bottom: 40rpx;
 }
 
-.label {
-  display: block;
-  font-size: 28rpx;
-  color: #34495e;
-  margin-bottom: 16rpx;
-  font-weight: 500;
+/* Modern Inputs */
+.modern-input {
+  width: 100%;
+  height: 96rpx;
+  background-color: #F5F7FA;
+  border-radius: 48rpx; /* High rounding */
+  padding: 0 40rpx;
+  font-size: 30rpx;
+  color: #333;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
 }
 
-.input {
-  width: 100%;
-  height: 88rpx;
-  background-color: #f0f4f8; /* Very light blue/gray */
-  border-radius: 12rpx;
-  padding: 0 24rpx;
-  font-size: 30rpx;
-  color: #2c3e50;
-  box-sizing: border-box;
+.modern-input:focus {
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 4rpx rgba(0, 122, 255, 0.2); /* Focus glow */
 }
 
 .placeholder {
-  color: #bdc3c7;
+  color: #A0AEC0;
 }
 
-/* Login Button */
+/* Main Action Button */
 .login-btn {
-  background: linear-gradient(135deg, #2b86ff, #0056b3); /* Slightly brighter start */
+  background: linear-gradient(135deg, #0062E6, #33AEFF);
   color: #ffffff;
-  font-size: 34rpx; /* Slightly larger text */
-  font-weight: 600; /* Semi-bold */
-  height: 100rpx; /* Slightly taller */
+  font-size: 34rpx;
+  font-weight: 600;
+  height: 96rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50rpx; /* Fully rounded */
-  margin-top: 40rpx; /* More breathing room */
-  box-shadow: 0 12rpx 24rpx rgba(0, 86, 179, 0.25); /* softer, deeper shadow */
-  letter-spacing: 4rpx; /* Add spacing for elegance */
-  transition: all 0.3s ease; /* Smooth transition */
+  border-radius: 48rpx; /* Capsule style */
+  margin-top: 60rpx;
+  box-shadow: 0 10rpx 20rpx rgba(0, 98, 230, 0.3);
+  letter-spacing: 2rpx;
+  transition: all 0.3s ease;
+  border: none; /* Reset default border */
 }
 
 .login-btn:active {
-  opacity: 0.95;
-  transform: scale(0.96);
-  box-shadow: 0 4rpx 12rpx rgba(0, 86, 179, 0.2); /* Compressed shadow */
+  transform: scale(0.98);
+  opacity: 0.9;
+  box-shadow: 0 6rpx 12rpx rgba(0, 98, 230, 0.25);
 }
 
 /* Footer Section */
 .footer {
   margin-top: auto;
   padding-bottom: 40rpx;
+  text-align: center;
+  position: relative;
+  z-index: 2;
 }
 
 .copyright {
   font-size: 24rpx;
-  color: #95a5a6;
+  color: #94A3B8;
+  letter-spacing: 1rpx;
 }

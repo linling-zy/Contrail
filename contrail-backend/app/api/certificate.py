@@ -2,6 +2,7 @@
 证书相关 API
 提供证书上传、查询、审核等功能
 """
+import json
 import logging
 import mimetypes
 import uuid
@@ -56,6 +57,7 @@ def upload_certificate():
     后端中转上传模式（multipart/form-data）：
     - file: 证书文件（jpg/png/pdf）
     - certName: 证书名称（或 name）
+    - extraData: 额外数据（JSON字符串，可选）
 
     约定：
     - 绝不使用用户原始文件名作为存储名
@@ -66,6 +68,7 @@ def upload_certificate():
 
     file = request.files.get("file")
     cert_name = request.form.get("certName") or request.form.get("name")
+    extra_data_str = request.form.get("extraData")
 
     if not cert_name:
         return jsonify({"code": 400, "msg": "certName is required"}), 400
@@ -98,6 +101,31 @@ def upload_certificate():
     if not user:
         return jsonify({"code": 404, "msg": "user not found"}), 404
 
+    # 解析 extraData（如果提供）
+    extra_data = None
+    if extra_data_str:
+        try:
+            extra_data = json.loads(extra_data_str)
+        except json.JSONDecodeError:
+            return jsonify({"code": 400, "msg": "extraData must be valid JSON"}), 400
+
+    # 唯一性检查（硬编码逻辑）
+    # 如果证书类型是"英语四级"、"英语六级"或"雅思IELTS"，检查是否已存在非驳回状态的同名证书
+    single_upload_types = ["英语四级", "英语六级", "雅思IELTS"]
+    if cert_name in single_upload_types:
+        existing_cert = Certificate.query.filter_by(
+            user_id=user_id,
+            name=cert_name
+        ).filter(
+            Certificate.status != Certificate.STATUS_REJECTED
+        ).first()
+        
+        if existing_cert:
+            return jsonify({
+                "code": 400,
+                "msg": "该类型证书只允许上传一次，请勿重复提交"
+            }), 400
+
     # 上传到 MinIO
     try:
         upload_bytes(object_key=object_key, data=data, content_type=content_type)
@@ -110,7 +138,8 @@ def upload_certificate():
         user_id=user_id,
         name=cert_name,
         image_url=object_key,
-        status=Certificate.STATUS_PENDING
+        status=Certificate.STATUS_PENDING,
+        extra_data=extra_data
     )
     
     try:

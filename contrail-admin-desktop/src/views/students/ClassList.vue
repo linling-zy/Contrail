@@ -249,7 +249,12 @@ const getList = async () => {
             medical: item.medical_status || 'pending',
             political: item.political_status || 'pending',
             admission: item.admission_status || 'pending'
-          }
+          },
+          // 新增：将后端返回的扩展字段一并挂到列表项上，供详情组件使用
+          credits: item.credits ?? null,
+          gpa: item.gpa ?? null,
+          birthplace: item.birthplace || '',
+          phone: item.phone || ''
         }
         
         return mapped

@@ -8,7 +8,9 @@ Page({
             grade: '',
             major: '',
             class: '',
-            studentId: ''
+            studentId: '',
+            birthplace: '',
+            phone: ''
         },
         paddingTop: 0,
         navBarHeight: 0,
@@ -63,6 +65,8 @@ Page({
                     major: user.major || '',
                     class: user.class_name || '',
                     studentId: user.student_id || '',
+                    birthplace: user.birthplace || '',
+                    phone: user.phone || ''
                 }
             })
         } catch (err) {

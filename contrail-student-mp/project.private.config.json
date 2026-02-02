@@ -6,5 +6,24 @@
     "skylineRenderEnable": false,
     "urlCheck": false
   },
-  "libVersion": "3.13.2"
+  "libVersion": "3.13.2",
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "pages/certificates/certificates",
+          "pathName": "pages/certificates/certificates",
+          "query": "",
+          "scene": null,
+          "launchMode": "default",
+          "partialCompile": {
+            "enabled": true,
+            "pages": [
+              "pages/certificate_edit/certificate_edit"
+            ]
+          }
+        }
+      ]
+    }
+  }
 }

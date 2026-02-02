@@ -27,7 +27,7 @@
       <view class="log-item" wx:for="{{scoreLogs}}" wx:key="id">
         <view class="log-left">
           <view class="log-reason">{{item.reason || '无说明'}}</view>
-          <view class="log-time">{{formatDate(item.create_time)}}</view>
+          <view class="log-time">{{item.formatted_time}}</view>
         </view>
         <view class="log-right">
           <text class="log-delta {{item.delta > 0 ? 'positive' : 'negative'}}">

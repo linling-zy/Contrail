@@ -1,3 +1,9 @@
+<!-- Custom Background -->
+<view class="immersive-bg">
+  <view class="bg-blob blob-1"></view>
+  <view class="bg-blob blob-2"></view>
+</view>
+
 <!-- Custom Navigation Bar -->
 <view class="custom-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
   <view class="nav-content">
@@ -9,96 +15,216 @@
 </view>
 
 <!-- Main Page Content -->
-<view class="container" style="padding-top: {{headerHeight}}px;">
-  
-  <!-- Loading State -->
-  <block wx:if="{{isLoadingCertTypes}}">
-    <view class="empty-state">
-      <text class="empty-text">加载中...</text>
-    </view>
-  </block>
+<scroll-view class="container-scroll" scroll-y style="padding-top: {{headerHeight}}px;">
+  <view class="container-inner">
 
-  <!-- Empty State: No Certificate Types -->
-  <block wx:elif="{{hasNoCertTypes}}">
-    <view class="empty-state">
-      <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
-      <text class="empty-title">暂无证书需要提交</text>
-      <text class="empty-desc">您当前部门暂未配置需要提交的证书类型</text>
-    </view>
-  </block>
+    <!-- Loading -->
+    <block wx:if="{{isLoadingCertTypes}}">
+        <view class="loading-state">加载中...</view>
+    </block>
+    
+    <!-- Empty -->
+    <block wx:elif="{{hasNoCertTypes}}">
+      <view class="empty-state">
+        <image src="/images/empty_cert.png" mode="widthFix" class="empty-img"></image>
+        <text class="empty-title">暂无证书类型</text>
+      </view>
+    </block>
 
-  <!-- Normal Form Content -->
-  <block wx:else>
-    <!-- Alert Placeholder (Always exists to maintain fixed spacing) -->
-    <view class="alert-placeholder">
-      <!-- Alert Banner (Absolute positioned, overlays placeholder) -->
-      <view class="alert-box" wx:if="{{isRejected}}">
-        <icon type="warn" size="18" color="#f44336"></icon>
+    <!-- Form Content -->
+    <block wx:else>
+
+       <!-- Alert Banner -->
+      <view class="alert-glass" wx:if="{{isRejected}}">
+        <icon type="warn" size="16" color="#f44336"></icon>
         <text class="alert-text">驳回原因：{{rejectReason}}</text>
       </view>
-    </view>
 
-    <!-- White Card Container -->
-    <view class="content-card">
-      
-      <!-- 1. Certificate Name Selection (Row) -->
-      <view class="form-item-row" bindtap="togglePicker">
-        <view class="row-label">证书名称</view>
-        <view class="row-value {{selectedCert ? '' : 'placeholder'}}" style="opacity: {{isRejected ? 0.5 : 1}}">
-          {{selectedCert || '请选择'}}
-        </view>
-      </view>
-
-      <!-- Divider -->
-      <view class="divider"></view>
-
-      <!-- 2. Upload Area -->
-      <view class="upload-area-wrapper">
-        <view class="area-label">上传凭证</view>
+      <!-- Panel A: Core Info & Upload (Identity & Proof) -->
+      <view class="glass-panel panel-core">
+        <view class="panel-title">核心信息</view>
         
-        <!-- Upload Box -->
-        <view class="upload-box" bindtap="onUpload" wx:if="{{!imagePath}}">
-          <view class="upload-dashed">
-            <image src="/images/camera_icon.png" class="camera-icon" mode="aspectFit"></image>
-            <text class="upload-hint">点击上传证书清晰照片</text>
-          </view>
+        <!-- Cert Name / Type -->
+        <view class="form-group" bindtap="{{!isNameEditable ? 'togglePicker' : ''}}">
+            <view class="label-tiny">证书名称</view>
+            <view class="input-wrapper-glass">
+                <block wx:if="{{isNameEditable}}">
+                   <input class="glass-input" placeholder="请输入名称" value="{{formData.user_defined_name || selectedCert}}" bindinput="onInputChange" data-field="user_defined_name" />
+                   <view class="picker-trigger-btn" catchtap="togglePicker">重选</view>
+                </block>
+                <block wx:else>
+                   <view class="glass-input readonly {{selectedCert ? '' : 'placeholder'}}">
+                     {{selectedCert || '请选择类型'}}
+                   </view>
+                   <text class="glass-arrow" wx:if="{{!isRejected}}">▼</text>
+                </block>
+            </view>
         </view>
 
-        <!-- Preview Box -->
-        <view class="preview-box" wx:else>
-          <image src="{{imagePath}}" class="preview-img" mode="aspectFill" bindtap="previewImage"></image>
-          <view class="remove-btn" catchtap="onRemoveImg">
-            <icon type="clear" size="20" color="#f44336"></icon>
-          </view>
-        </view>
 
-        <text class="warning-text">请确保证书编号和公章清晰可见</text>
+
+        <!-- Upload Zone -->
+        <view class="form-group upload-group">
+            <view class="label-tiny">凭证上传</view>
+            <view class="upload-glass-zone {{imagePath ? 'has-image' : ''}}" bindtap="onUpload">
+                <block wx:if="{{!imagePath}}">
+                    <view class="upload-placeholder">
+                        <image src="/images/camera_icon_linear.png" class="upload-icon" mode="aspectFit"></image>
+                        <text class="upload-hint">点击上传照片</text>
+                    </view>
+                </block>
+                <block wx:else>
+                   <image src="{{imagePath}}" class="upload-preview" mode="aspectFill" catchtap="previewImage"></image>
+                   <view class="upload-overlay">
+                      <view class="overlay-btn" catchtap="onUpload">更换</view>
+                      <view class="overlay-btn remove" catchtap="onRemoveImg">删除</view>
+                   </view>
+                </block>
+            </view>
+        </view>
       </view>
 
-    </view>
-  </block>
+      <!-- Panel B: Detail Data (Dynamic) -->
+      <view class="glass-panel panel-detail" wx:if="{{selectedCert}}">
+         <view class="panel-title">详细数据</view>
 
+         <!-- 1. CET Layout (Hero Single Input) -->
+         <block wx:if="{{formType === 'CET'}}">
+            <view class="cet-hero-container">
+                <view class="label-tiny center">考试分数</view>
+                <view class="input-hero-wrapper">
+                    <input class="input-hero" type="digit" placeholder="0" value="{{formData.score}}" bindinput="onInputChange" data-field="score" />
+                    <text class="unit-hero">分</text>
+                </view>
+            </view>
+         </block>
+
+         <!-- 2. IELTS Layout (Grid + Total) -->
+         <block wx:elif="{{formType === 'IELTS'}}">
+            <view class="ielts-grid">
+                 <view class="grid-cell">
+                    <view class="label-tiny">听力</view>
+                    <input class="glass-input-small" type="digit" placeholder="-" value="{{formData.ielts_listening}}" bindinput="onInputChange" data-field="ielts_listening" />
+                 </view>
+                 <view class="grid-cell">
+                    <view class="label-tiny">阅读</view>
+                    <input class="glass-input-small" type="digit" placeholder="-" value="{{formData.ielts_reading}}" bindinput="onInputChange" data-field="ielts_reading" />
+                 </view>
+                 <view class="grid-cell">
+                    <view class="label-tiny">写作</view>
+                    <input class="glass-input-small" type="digit" placeholder="-" value="{{formData.ielts_writing}}" bindinput="onInputChange" data-field="ielts_writing" />
+                 </view>
+                 <view class="grid-cell">
+                    <view class="label-tiny">口语</view>
+                    <input class="glass-input-small" type="digit" placeholder="-" value="{{formData.ielts_speaking}}" bindinput="onInputChange" data-field="ielts_speaking" />
+                 </view>
+            </view>
+            <view class="form-group ielts-total">
+                <view class="label-tiny">总分 (Total)</view>
+                <input class="glass-input" type="digit" placeholder="请输入总分" value="{{formData.ielts_total}}" bindinput="onInputChange" data-field="ielts_total" />
+            </view>
+         </block>
+
+         <!-- 3. JOB Details (Date Range) -->
+         <block wx:elif="{{formType === 'JOB'}}">
+             <view class="form-group">
+                <view class="label-tiny">担任职务</view>
+                <view class="input-wrapper-glass">
+                    <input class="glass-input" placeholder="请输入职务名称" value="{{formData.job_title}}" bindinput="onInputChange" data-field="job_title" />
+                </view>
+             </view>
+             <view class="form-group">
+                <view class="label-tiny">任职时间 (起 - 止)</view>
+                <view class="date-range-row">
+                    <!-- Start Date -->
+                     <picker mode="date" value="{{formData.job_start_date}}" end="{{formData.job_end_date || '2099-12-31'}}" bindchange="onDateChange" data-field="job_start_date">
+                        <view class="input-wrapper-glass date-col">
+                            <view class="glass-input center {{formData.job_start_date? '' : 'placeholder'}}">
+                                {{formData.job_start_date || '开始时间'}}
+                            </view>
+                        </view>
+                    </picker>
+                    <view class="date-separator">至</view>
+                    <!-- End Date -->
+                    <picker mode="date" value="{{formData.job_end_date}}" start="{{formData.job_start_date || '1900-01-01'}}" bindchange="onDateChange" data-field="job_end_date">
+                         <view class="input-wrapper-glass date-col">
+                            <view class="glass-input center {{formData.job_end_date? '' : 'placeholder'}}">
+                                {{formData.job_end_date || '结束时间'}}
+                            </view>
+                        </view>
+                    </picker>
+                </view>
+             </view>
+             <view class="form-group">
+                <view class="label-tiny">集体获奖 (选填)</view>
+                <view class="input-wrapper-glass">
+                    <input class="glass-input" placeholder="请输入集体奖项名称 (若有)" value="{{formData.job_award}}" bindinput="onInputChange" data-field="job_award" />
+                </view>
+             </view>
+         </block>
+
+         <!-- 4. AWARD Details -->
+         <block wx:elif="{{formType === 'AWARD'}}">
+             <view class="form-group">
+                <view class="label-tiny">获奖时间</view>
+                 <picker mode="date" value="{{formData.award_date}}" bindchange="onDateChange" data-field="award_date">
+                    <view class="input-wrapper-glass">
+                        <view class="glass-input center {{formData.award_date ? '' : 'placeholder'}}">
+                            {{formData.award_date || '请选择日期'}}
+                        </view>
+                         <text class="glass-arrow">▼</text>
+                    </view>
+                </picker>
+             </view>
+             <view class="form-group">
+                <view class="label-tiny">主办单位</view>
+                <view class="input-wrapper-glass">
+                    <input class="glass-input" placeholder="请输入主办单位全称" value="{{formData.award_org}}" bindinput="onInputChange" data-field="award_org" />
+                </view>
+             </view>
+             <view class="form-group">
+                <view class="label-tiny">奖励级别</view>
+                 <picker mode="selector" range="{{awardLevels}}" value="{{awardLevelIndex}}" bindchange="onLevelChange">
+                    <view class="input-wrapper-glass">
+                        <view class="glass-input center {{formData.award_level ? '' : 'placeholder'}}">
+                            {{formData.award_level || '请选择级别'}}
+                        </view>
+                        <text class="glass-arrow">▼</text>
+                    </view>
+                </picker>
+             </view>
+             <view class="form-group">
+                <view class="label-tiny">获奖等次</view>
+                <view class="input-wrapper-glass">
+                    <input class="glass-input" placeholder="如：一等奖 / 金奖" value="{{formData.award_rank}}" bindinput="onInputChange" data-field="award_rank" />
+                </view>
+             </view>
+         </block>
+      </view>
+      
+
+
+    </block>
+  </view>
+</scroll-view>
+
+<!-- Bottom Action Bar -->
+<view class="action-bar-glass" wx:if="{{!hasNoCertTypes && !isLoadingCertTypes}}">
+    <button class="submit-btn-glass {{isSubmitting ? 'disabled' : ''}}" bindtap="onSubmit" disabled="{{isSubmitting}}">
+      {{isSubmitting ? '正在提交...' : '提交证书'}}
+    </button>
 </view>
 
-  <!-- Bottom Submit Button (Only show when has certificate types) -->
-  <view class="footer-btn-area" wx:if="{{!hasNoCertTypes && !isLoadingCertTypes}}">
-    <button class="submit-btn {{isSubmitting ? 'disabled' : ''}}" bindtap="onSubmit" disabled="{{isSubmitting}}">
-      {{isSubmitting ? '提交中...' : '提交审核'}}
-    </button>
-  </view>
-
-  <!-- Bottom Sheet Picker -->
-  <view class="bottom-sheet-mask {{showPicker ? 'show' : ''}}" bindtap="togglePicker">
-    <view class="bottom-sheet" catchtap="stopProp">
+<!-- Picker Mask (Same as before but styled) -->
+<view class="bottom-sheet-mask {{showPicker ? 'show' : ''}}" bindtap="togglePicker">
+    <view class="bottom-sheet-glass" catchtap="stopProp">
       <view class="sheet-header">
-        <text class="sheet-title">选择证书</text>
+        <text>选择证书</text>
         <view class="close-icon" bindtap="togglePicker">×</view>
       </view>
-      
       <view class="search-bar">
-        <input class="search-input" placeholder="搜索证书名称" bindinput="onSearch" value="{{searchText}}" />
+        <input class="search-input-glass" placeholder="搜索..." bindinput="onSearch" value="{{searchText}}" />
       </view>
-
       <scroll-view scroll-y class="sheet-list">
         <block wx:for="{{filteredList}}" wx:key="*this">
           <view class="sheet-item" hover-class="item-hover" bindtap="onSelectCert" data-name="{{item}}">
@@ -106,7 +232,7 @@
             <icon wx:if="{{selectedCert === item}}" type="success_no_circle" size="16" color="#0056b3"></icon>
           </view>
         </block>
-        <view wx:if="{{filteredList.length === 0}}" class="no-result">无搜索结果</view>
+        <view wx:if="{{filteredList.length === 0}}" class="no-result">无结果</view>
       </scroll-view>
     </view>
-  </view>
+</view>

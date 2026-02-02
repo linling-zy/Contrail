@@ -6,14 +6,15 @@ Page({
         scrollViewHeight: 0,
         tabBarHeight: 0,
         loading: false,
-        score: 85,
+        score: 0, // Default score
         statusList: [
             { name: '初试', status: 'qualified', label: '合格' },
             { name: '体检', status: 'pending', label: '待处理' },
             { name: '政审', status: 'unqualified', label: '不合格' },
             { name: '录取', status: 'pending', label: '待处理' }
         ],
-        comment: '该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。思想品德良好，乐于助人，深受老师和同学喜爱。希望在未来的学习和工作中继续保持良好的作风，不断进取，取得更大的成绩。该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。'
+        comment: '该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。思想品德良好，乐于助人，深受老师和同学喜爱。希望在未来的学习和工作中继续保持良好的作风，不断进取，取得更大的成绩。该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。',
+        displayComment: '该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。思想品德良好，乐于助人，深受老师和同学喜爱。希望在未来的学习和工作中继续保持良好的作风，不断进取，取得更大的成绩。该生在校期间表现优秀，学习刻苦努力，成绩优异。积极参加各类社团活动，具有较强的团队协作能力和组织能力。'
     },
     onLoad() {
         // Calculate safe area
@@ -83,10 +84,14 @@ Page({
             const comment = (dashboard && dashboard.comment) || '';
             const statusList = this._buildStatusList(dashboard && dashboard.process_status);
 
+            const displayComment = comment.length > 230 ? comment.substring(0, 230) + '...' : comment;
+
             this.setData({
                 score,
                 comment,
+                displayComment,
                 statusList,
+                updateDate: new Date().toISOString().split('T')[0]
             });
         } catch (e) {
             // 2) 兜底：只拉积分，避免主页空白（比如后端未部署 dashboard）
@@ -94,9 +99,12 @@ Page({
                 const scoreRes = await get('/student/score');
                 const score = (scoreRes && (scoreRes.total_score ?? scoreRes.totalScore)) ?? this.data.score;
                 if (score !== this.data.score) {
-                    this.setData({ score });
+                    this.setData({
+                        score,
+                        updateDate: new Date().toISOString().split('T')[0]
+                    });
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             wx.showToast({
                 title: e.message || '主页数据加载失败',

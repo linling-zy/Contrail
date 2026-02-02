@@ -86,6 +86,12 @@ class User(db.Model):
     political_status = db.Column(db.String(20), default='pending', nullable=False, comment='政审状态：qualified/pending/unqualified')
     admission_status = db.Column(db.String(20), default='pending', nullable=False, comment='录取状态：qualified/pending/unqualified')
     
+    # 学生信息补充字段
+    credits = db.Column(db.Float, nullable=True, comment='学分')
+    gpa = db.Column(db.Float, nullable=True, comment='绩点')
+    birthplace = db.Column(db.String(100), nullable=True, comment='籍贯')
+    phone = db.Column(db.String(20), nullable=True, comment='联系电话')
+    
     # 关系：一个用户有多条积分流水记录
     score_logs = db.relationship('ScoreLog', backref='user', lazy='dynamic', cascade='all, delete-orphan')
     
@@ -133,6 +139,10 @@ class User(db.Model):
             'medical_status': self.medical_status,
             'political_status': self.political_status,
             'admission_status': self.admission_status,
+            'credits': self.credits,
+            'gpa': self.gpa,
+            'birthplace': self.birthplace,
+            'phone': self.phone,
         }
         if include_score:
             data['total_score'] = self.total_score
@@ -197,6 +207,7 @@ class Certificate(db.Model):
     reject_reason = db.Column(db.String(200), nullable=True, comment='驳回原因（仅当status=2时有效）')
     upload_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, comment='上传时间')
     review_time = db.Column(db.DateTime, nullable=True, comment='审核时间')
+    extra_data = db.Column(db.JSON, nullable=True, comment='额外数据（JSON格式），用于存储分数、任职情况、获奖情况等详细信息')
     
     def to_dict(self):
         """转换为字典（用于 JSON 序列化）"""
@@ -210,6 +221,7 @@ class Certificate(db.Model):
             'reject_reason': self.reject_reason,
             'upload_time': self.upload_time.isoformat() if self.upload_time else None,
             'review_time': self.review_time.isoformat() if self.review_time else None,
+            'extra_data': self.extra_data,
         }
     
     def get_status_text(self):
