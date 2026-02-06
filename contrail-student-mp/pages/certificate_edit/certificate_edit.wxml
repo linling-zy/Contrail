@@ -177,6 +177,12 @@
                 </picker>
              </view>
              <view class="form-group">
+                <view class="label-tiny">奖励名称</view>
+                <view class="input-wrapper-glass">
+                    <input class="glass-input" placeholder="请输入奖励名称，如：全国大学生数学建模竞赛" value="{{formData.award_name}}" bindinput="onInputChange" data-field="award_name" />
+                </view>
+             </view>
+             <view class="form-group">
                 <view class="label-tiny">主办单位</view>
                 <view class="input-wrapper-glass">
                     <input class="glass-input" placeholder="请输入主办单位全称" value="{{formData.award_org}}" bindinput="onInputChange" data-field="award_org" />

@@ -21,6 +21,7 @@ from app.models import User, AdminUser, Department, ScoreLog, Comment, Certifica
 from app.utils.permission import get_admin_accessible_query
 from app.utils.rsa_utils import get_rsa_utils
 from app.utils.admin_permission import admin_required
+from app.utils.s3_presign import presign_get_object_url
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from docxtpl import DocxTemplate
 
@@ -106,13 +107,15 @@ def _cleanup_old_export_files(app, max_age_minutes=30):
 
 def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
     """
-    后台线程：部门学生档案批量导出
+    后台线程：部门学生档案批量导出（单人双文件：Word+Excel）
 
     步骤：
-      1. 查询部门和学生
-      2. 遍历学生，渲染 Word 模板
-      3. 将所有文档打包为 ZIP 文件
-      4. 更新 EXPORT_TASKS 中的任务状态
+      1. 查询部门和学生（预加载 certificates 和 score_logs）
+      2. 遍历学生，提取证书数据（从 extra_data JSON）
+      3. 生成积分明细 Excel 文件
+      4. 生成送飞鉴定表 Word 文件
+      5. 将所有文档打包为 ZIP 文件（按 {学院}_{班级}_{姓名}_{学号}/ 结构）
+      6. 更新 EXPORT_TASKS 中的任务状态
     """
     with app.app_context():
         try:
@@ -139,6 +142,8 @@ def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
                 return
 
             # 查询部门下所有学生
+            # 注意：User.certificates 和 User.score_logs 使用 lazy='dynamic'，返回 Query 对象
+            # 不能使用 joinedload，需要在循环中直接访问（dynamic 关系本身就是 Query 对象）
             users = User.query.filter_by(department_id=dept_id).order_by(User.id.asc()).all()
 
             with EXPORT_TASKS_LOCK:
@@ -162,6 +167,17 @@ def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
                         })
                 return
 
+            # 检查 pandas 是否可用
+            if not PANDAS_AVAILABLE:
+                with EXPORT_TASKS_LOCK:
+                    task = EXPORT_TASKS.get(task_id)
+                    if task is not None:
+                        task.update({
+                            'status': 'failed',
+                            'error': 'pandas 未安装，无法生成 Excel 文件',
+                        })
+                return
+
             # 临时目录及 ZIP 路径
             temp_dir = os.path.join(app.instance_path, 'temp')
             os.makedirs(temp_dir, exist_ok=True)
@@ -177,62 +193,418 @@ def _run_department_export_task(app, task_id: str, admin_id: int, dept_id: int):
             # 创建 ZIP 文件并逐个学生写入文档
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for idx, user in enumerate(users):
+                    # ========== 1. 数据清洗与提取 ==========
                     birth_date, gender = _extract_birth_and_gender(user.id_card_no)
-
-                    # 过滤掉系统加分的积分流水，格式化为每行一条的字符串
-                    score_logs_query = user.score_logs.filter(
-                        ScoreLog.type != ScoreLog.TYPE_SYSTEM
-                    ).order_by(ScoreLog.create_time.asc())
-                    score_logs_lines = []
-                    for log in score_logs_query.all():
+                    dept = user.department or department
+                    
+                    # 获取审核通过的证书
+                    # 注意：user.certificates 是 dynamic 关系，返回 Query 对象，需要调用 .all() 或 .filter()
+                    approved_certs = user.certificates.filter_by(status=Certificate.STATUS_APPROVED).all()
+                    
+                    # 提取英语四六级成绩（与 student.py 的 profile 接口保持一致）
+                    cet4_cert = None
+                    cet6_cert = None
+                    for cert in approved_certs:
+                        cert_name = cert.name or ''
+                        cert_name_upper = cert_name.upper()
+                        
+                        # 根据证书名称分类（与 profile 接口逻辑一致）
+                        if cert_name == '英语四级' or ('CET-4' in cert_name_upper or '四级' in cert_name):
+                            if not cet4_cert:  # 只取第一个（最新的）
+                                cet4_cert = cert
+                        elif cert_name == '英语六级' or ('CET-6' in cert_name_upper or '六级' in cert_name):
+                            if not cet6_cert:  # 只取第一个（最新的）
+                                cet6_cert = cert
+                    
+                    # 处理四级（与 profile 接口逻辑一致）
+                    cet4_score = ''
+                    if cet4_cert:
+                        extra_data = cet4_cert.extra_data or {}
+                        if not isinstance(extra_data, dict):
+                            extra_data = {}
+                        score = extra_data.get('score')
+                        if score is not None:
+                            cet4_score = str(score)
+                    
+                    # 处理六级（与 profile 接口逻辑一致）
+                    cet6_score = ''
+                    if cet6_cert:
+                        extra_data = cet6_cert.extra_data or {}
+                        if not isinstance(extra_data, dict):
+                            extra_data = {}
+                        score = extra_data.get('score')
+                        if score is not None:
+                            cet6_score = str(score)
+                    
+                    # 提取雅思成绩（取最新的一条）
+                    ielts_l = ielts_r = ielts_w = ielts_s = ielts_total = ''
+                    ielts_certs = [cert for cert in approved_certs 
+                                  if 'IELTS' in (cert.name or '').upper() or '雅思' in (cert.name or '')]
+                    if ielts_certs:
+                        # 按 upload_time 排序，取最新的
+                        latest_ielts = max(ielts_certs, key=lambda c: c.upload_time or datetime.min)
+                        extra_data = latest_ielts.extra_data or {}
+                        if isinstance(extra_data, dict):
+                            # 确保空值转换为空字符串，而不是 'None'
+                            listening_val = extra_data.get('listening')
+                            reading_val = extra_data.get('reading')
+                            writing_val = extra_data.get('writing')
+                            speaking_val = extra_data.get('speaking')
+                            total_val = extra_data.get('total')
+                            
+                            ielts_l = str(listening_val) if listening_val is not None else ''
+                            ielts_r = str(reading_val) if reading_val is not None else ''
+                            ielts_w = str(writing_val) if writing_val is not None else ''
+                            ielts_s = str(speaking_val) if speaking_val is not None else ''
+                            ielts_total = str(total_val) if total_val is not None else ''
+                    
+                    # 提取任职情况
+                    # 先识别任职类证书（根据证书名称和类型，与 student.py 保持一致）
+                    position_certs = []
+                    for cert in approved_certs:
+                        cert_name = cert.name or ''
+                        cert_type = (cert.extra_data or {}).get('type', '').lower() if isinstance(cert.extra_data, dict) else ''
+                        if cert_name == '任职情况' or cert_name == '任职经历' or cert_type == 'position' or '任职' in cert_name:
+                            position_certs.append(cert)
+                    
+                    jobs = []
+                    for cert in position_certs:
+                        extra_data = cert.extra_data or {}
+                        if not isinstance(extra_data, dict):
+                            extra_data = {}
+                        
+                        # 解析任职时间：优先使用 start_time/end_time，如果没有则尝试解析 date 字段
+                        start_time = extra_data.get('start_time', '') or ''
+                        end_time = extra_data.get('end_time', '') or ''
+                        
+                        # 如果 start_time/end_time 为空，尝试从 date 字段解析（格式：2026-02 至 2026-02）
+                        if not start_time and not end_time:
+                            date_str = extra_data.get('date', '') or ''
+                            if date_str and '至' in date_str:
+                                parts = date_str.split('至')
+                                if len(parts) == 2:
+                                    start_time = parts[0].strip()
+                                    end_time = parts[1].strip()
+                        
+                        # 处理集体获奖情况：优先使用 collective_awards，如果没有则使用 award 字段（与 student.py 保持一致）
+                        collective_awards = extra_data.get('collective_awards') or extra_data.get('collectiveAwards')
+                        if not collective_awards:
+                            collective_awards = extra_data.get('award', '')  # 兼容 award 字段
+                        
+                        collective_awards_str = ''
+                        if collective_awards:
+                            if isinstance(collective_awards, list):
+                                collective_awards_str = '；'.join(str(a) for a in collective_awards if a)
+                            elif isinstance(collective_awards, str):
+                                collective_awards_str = collective_awards.strip()
+                        
+                        job = {
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'role': extra_data.get('role') or extra_data.get('position', ''),  # 兼容 position 字段
+                            'organization': extra_data.get('organization') or extra_data.get('org', ''),  # 兼容 org 字段
+                            'collective_awards': collective_awards_str,
+                        }
+                        jobs.append(job)
+                    
+                    # 提取获奖情况（先识别获奖类证书，与 student.py 保持一致）
+                    award_certs = []
+                    for cert in approved_certs:
+                        cert_name = cert.name or ''
+                        cert_type = (cert.extra_data or {}).get('type', '').lower() if isinstance(cert.extra_data, dict) else ''
+                        # 排除英语和任职类证书
+                        is_english = (cert_name == '英语四级' or cert_name == '英语六级' or 
+                                     'CET-4' in cert_name.upper() or 'CET-6' in cert_name.upper() or
+                                     '四级' in cert_name or '六级' in cert_name or
+                                     'IELTS' in cert_name.upper() or '雅思' in cert_name)
+                        is_position = (cert_name == '任职情况' or cert_name == '任职经历' or 
+                                      cert_type == 'position' or '任职' in cert_name)
+                        
+                        # 识别获奖类证书
+                        if not is_english and not is_position:
+                            if cert_name == '获奖情况' or cert_type in ['competition', 'honor']:
+                                award_certs.append(cert)
+                            # 如果证书名称不是明确的英语/任职类，也视为获奖（兼容处理）
+                            elif cert_name and cert_name not in ['英语四级', '英语六级', '任职情况', '任职经历']:
+                                award_certs.append(cert)
+                    
+                    awards = []
+                    for cert in award_certs:
+                        extra_data = cert.extra_data or {}
+                        if not isinstance(extra_data, dict):
+                            extra_data = {}
+                        
+                        # 标准化获奖信息（与 profile 接口逻辑一致）
+                        award_date = extra_data.get('date')
+                        # 如果 date 为空，尝试使用 upload_time
+                        if not award_date and cert.upload_time:
+                            award_date = cert.upload_time.strftime('%Y-%m-%d')
+                        
+                        award = {
+                            'date': award_date if award_date else '',  # 转换为字符串或空字符串
+                            'name': extra_data.get('name') or cert.name or '',  # 奖励名称，如果没有 name，使用证书名称
+                            'level': extra_data.get('level') or '',  # 奖励级别
+                            'rank': extra_data.get('rank') or '',  # 获奖等次
+                            'organizer': extra_data.get('organizer') or '',  # 主办单位
+                        }
+                        
+                        awards.append(award)
+                    
+                    # ========== 2. 生成积分明细 Excel ==========
+                    # 注意：user.score_logs 是 dynamic 关系，返回 Query 对象
+                    score_logs_list = user.score_logs.order_by(ScoreLog.create_time.asc()).all()
+                    excel_data = []
+                    for log in score_logs_list:
                         if log.delta is None:
                             continue
+                        date_str = log.create_time.strftime('%Y-%m-%d') if log.create_time else ''
                         delta_str = f"+{log.delta}" if log.delta > 0 else str(log.delta)
                         reason = log.reason or ''
-                        # 格式化为：+5，理由：长的好看；
-                        score_logs_lines.append(f"{delta_str}，理由：{reason}；")
-                    # 将列表合并为单个字符串，每行一条（使用换行符分隔）
-                    score_logs = '\n'.join(score_logs_lines) if score_logs_lines else ''
-
-                    # 仅保留审核通过的证书，格式化为每行一条的字符串
-                    certificates_query = user.certificates.filter_by(status=Certificate.STATUS_APPROVED)
-                    certificates_lines = [cert.name for cert in certificates_query.all()]
-                    # 将列表合并为单个字符串，每行一条（使用换行符分隔）
-                    certificates = '\n'.join(certificates_lines) if certificates_lines else ''
-
-                    dept = user.department or department
-                    # 生成导出日期（格式：2026年1月27日）
+                        # 操作类型映射：'system' -> '系统', 'manual' -> '人工'
+                        op_type = '系统' if log.type == ScoreLog.TYPE_SYSTEM else '人工'
+                        excel_data.append({
+                            '日期': date_str,
+                            '变动分值': delta_str,
+                            '变动原因': reason,
+                            '操作类型': op_type,
+                        })
+                    
+                    # 使用 pandas 生成 Excel
+                    df = pd.DataFrame(excel_data)
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        df.to_excel(writer, index=False, sheet_name='积分明细')
+                    excel_buffer.seek(0)
+                    
+                    # ========== 3. 准备 Word Context（包含定长切片逻辑）==========
+                    # 任职情况：前3条映射到扁平变量，超出部分放入 jobs_extra
+                    jobs_main = jobs[:3]
+                    jobs_extra_raw = jobs[3:]
+                    # 格式化额外任职情况：任职时间：xxx，担任职务：xxx，任职期间集体获奖情况：xxxxxx;
+                    # 注意：docxtpl 模板中可能使用 {% for job in jobs_extra %} 循环，需要传递字典列表
+                    jobs_extra = []
+                    for idx, job in enumerate(jobs_extra_raw, start=4):  # 从第4条开始编号
+                        start_time = job.get('start_time', '') or ''
+                        end_time = job.get('end_time', '') or ''
+                        job_time = f"{start_time} - {end_time}".strip(' -') if (start_time or end_time) else '无'
+                        job_role = job.get('role', '') or '无'
+                        collective_awards = job.get('collective_awards', '') or '无'
+                        # 格式：任职时间：xxx，担任职务：xxx，任职期间集体获奖情况：xxxxxx;
+                        job_str = f"任职时间：{job_time}，担任职务：{job_role}，任职期间集体获奖情况：{collective_awards};"
+                        jobs_extra.append({
+                            'index': idx,
+                            'text': job_str,
+                            'time': job_time,
+                            'role': job_role,
+                            'collective_awards': collective_awards
+                        })
+                    
+                    # 填充前3条任职变量（不足3条用空字符串填充）
+                    job_vars = {}
+                    for i in range(1, 4):
+                        if i <= len(jobs_main):
+                            job = jobs_main[i - 1]
+                            start_time = job.get('start_time', '') or ''
+                            end_time = job.get('end_time', '') or ''
+                            # 如果任职时间都为空，显示"无"，否则显示时间范围
+                            if start_time or end_time:
+                                job_vars[f'job_{i}_time'] = f"{start_time} - {end_time}".strip(' -')
+                            else:
+                                job_vars[f'job_{i}_time'] = '无'
+                            job_vars[f'job_{i}_role'] = job.get('role', '') or ''
+                            # 任职期间集体获奖情况：Word 模板使用 job_{i}_note 字段
+                            # 如果为空，显示"无"
+                            collective_awards = job.get('collective_awards', '') or ''
+                            job_vars[f'job_{i}_note'] = collective_awards if collective_awards else '无'
+                            # 保留兼容变量名
+                            job_vars[f'job_{i}_collective_awards'] = collective_awards if collective_awards else '无'
+                        else:
+                            job_vars[f'job_{i}_time'] = ''
+                            job_vars[f'job_{i}_role'] = ''
+                            job_vars[f'job_{i}_note'] = ''
+                            job_vars[f'job_{i}_collective_awards'] = ''
+                    
+                    # 获奖情况：前3条映射到扁平变量，超出部分放入 awards_extra
+                    awards_main = awards[:3]
+                    awards_extra_raw = awards[3:]
+                    # 格式化额外获奖情况：奖励时间：xxx，奖励名称：xxxx，主办单位：xxx；奖励级别：xxxx，获奖等次：xxx；
+                    # 注意：docxtpl 模板中可能使用 {% for award in awards_extra %} 循环，需要传递字典列表
+                    awards_extra = []
+                    for idx, award in enumerate(awards_extra_raw, start=4):  # 从第4条开始编号
+                        award_date = award.get('date', '') or '无'
+                        award_name = award.get('name', '') or '无'
+                        award_organizer = award.get('organizer', '') or '无'
+                        award_level = award.get('level', '') or '无'
+                        award_rank = award.get('rank', '') or '无'
+                        # 格式：奖励时间：xxx，奖励名称：xxxx，主办单位：xxx；奖励级别：xxxx，获奖等次：xxx；
+                        award_str = f"奖励时间：{award_date}，奖励名称：{award_name}，主办单位：{award_organizer}；奖励级别：{award_level}，获奖等次：{award_rank}；"
+                        awards_extra.append({
+                            'index': idx,
+                            'text': award_str,
+                            'date': award_date,
+                            'name': award_name,
+                            'organizer': award_organizer,
+                            'level': award_level,
+                            'rank': award_rank
+                        })
+                    
+                    # 填充前3条获奖变量（不足3条用空字符串填充）
+                    # 注意：Word 模板使用的字段名为：award_{i}_time, award_{i}_name, award_{i}_host, award_{i}_level, award_{i}_grade
+                    award_vars = {}
+                    for i in range(1, 4):
+                        if i <= len(awards_main):
+                            award = awards_main[i - 1]
+                            # 确保所有字段都不为 None，转换为字符串
+                            award_name = award.get('name', '') or ''
+                            award_date = award.get('date', '') or ''
+                            award_level = award.get('level', '') or ''
+                            award_rank = award.get('rank', '') or ''  # rank 对应模板中的 grade
+                            award_organizer = award.get('organizer', '') or ''  # organizer 对应模板中的 host
+                            
+                            # Word 模板使用的字段名
+                            award_vars[f'award_{i}_time'] = str(award_date) if award_date else ''
+                            award_vars[f'award_{i}_name'] = str(award_name) if award_name else ''
+                            award_vars[f'award_{i}_host'] = str(award_organizer) if award_organizer else ''  # 主办单位
+                            award_vars[f'award_{i}_level'] = str(award_level) if award_level else ''
+                            award_vars[f'award_{i}_grade'] = str(award_rank) if award_rank else ''  # 获奖等次
+                            
+                            # 保留兼容变量名
+                            award_vars[f'award_{i}_date'] = str(award_date) if award_date else ''
+                            award_vars[f'award_{i}_rank'] = str(award_rank) if award_rank else ''
+                            award_vars[f'award_{i}_organizer'] = str(award_organizer) if award_organizer else ''
+                        else:
+                            award_vars[f'award_{i}_time'] = ''
+                            award_vars[f'award_{i}_name'] = ''
+                            award_vars[f'award_{i}_host'] = ''
+                            award_vars[f'award_{i}_level'] = ''
+                            award_vars[f'award_{i}_grade'] = ''
+                            # 保留兼容变量名
+                            award_vars[f'award_{i}_date'] = ''
+                            award_vars[f'award_{i}_rank'] = ''
+                            award_vars[f'award_{i}_organizer'] = ''
+                    
+                    # 生成导出日期
                     export_date = datetime.now().strftime('%Y年%m月%d日')
                     
+                    # 合并显示英语四六级分数（格式：四级：xxx\n六级：xxx，如果没有就写"无"）
+                    english_level = ''
+                    if cet4_score or cet6_score:
+                        parts = []
+                        if cet4_score:
+                            parts.append(f'四级：{cet4_score}')
+                        else:
+                            parts.append('四级：无')
+                        if cet6_score:
+                            parts.append(f'六级：{cet6_score}')
+                        else:
+                            parts.append('六级：无')
+                        english_level = '\n'.join(parts)
+                    else:
+                        english_level = '四级：无\n六级：无'
+                    
+                    # 格式化 GPA（保留2位小数）
+                    gpa_display = ''
+                    if user.gpa is not None:
+                        gpa_display = f'{user.gpa:.2f}'
+                    
+                    # 构建 Word 模板上下文
                     context = {
-                        'name': user.name,
-                        'id_card_no': user.id_card_no,
+                        'name': user.name or '',
+                        'id_card_no': user.id_card_no or '',
                         'student_id': user.student_id or '',
                         'college': dept.college or '',
+                        'class_name': dept.class_name or '',  # 班级
                         'grade': dept.grade or '',
-                        'total_score': user.total_score,
+                        'total_score': user.total_score or 0,
                         'birth_date': birth_date,
                         'gender': gender,
-                        'score_logs': score_logs,
-                        'certificates': certificates,
-                        'export_date': export_date,  # 导出日期
+                        'ethnicity': user.ethnicity or '',  # 民族
+                        'political_affiliation': user.political_affiliation or '',  # 政治面貌
+                        'gpa': gpa_display,  # 学分绩点
+                        'birthplace': user.birthplace or '',  # 籍贯
+                        'phone': user.phone or '',  # 联系电话
+                        'export_date': export_date,
+                        # 英语成绩（Word 模板使用 english_level 字段）
+                        'english_level': english_level,  # 格式：四级：xxx\n六级：xxx，如果没有就写"无"
+                        # 保留兼容变量名
+                        'cet4_score': cet4_score,
+                        'cet6_score': cet6_score,
+                        'cet_scores': english_level,
+                        'cet4': cet4_score,
+                        'cet6': cet6_score,
+                        # 雅思成绩（Word 模板使用的字段名）
+                        'ielts_speaking': ielts_s,  # 口语
+                        'ielts_listening': ielts_l,  # 听力
+                        'ielts_reading': ielts_r,  # 阅读
+                        'ielts_writing': ielts_w,  # 写作
+                        'ielts_total': ielts_total,  # 总分
+                        # 保留兼容变量名
+                        'ielts_l': ielts_l,
+                        'ielts_r': ielts_r,
+                        'ielts_w': ielts_w,
+                        'ielts_s': ielts_s,
+                        # 任职情况（前3条）
+                        **job_vars,
+                        'jobs_extra': jobs_extra,  # 超出3条的数据，用于附录页循环展示（格式化的字典列表）
+                        # 获奖情况（前3条）
+                        **award_vars,
+                        'awards_extra': awards_extra,  # 超出3条的数据，用于附录页循环展示（格式化的字典列表）
+                        # 缺失字段（必须置空）
+                        'photo_path': None,
+                        'warning_logs': [],  # 积分预警情况（暂无数据源，保持为空）
                     }
-
-                    # 渲染模板
+                    
+                    # #region agent log
+                    import json
+                    log_data = {
+                        'sessionId': 'debug-session',
+                        'runId': 'run1',
+                        'hypothesisId': 'J',
+                        'location': 'admin_student.py:560',
+                        'message': '检查额外数据格式',
+                        'data': {
+                            'user_id': user.id,
+                            'jobs_extra_count': len(jobs_extra),
+                            'jobs_extra_sample': jobs_extra[0] if jobs_extra else None,
+                            'awards_extra_count': len(awards_extra),
+                            'awards_extra_sample': awards_extra[0] if awards_extra else None
+                        },
+                        'timestamp': int(datetime.now().timestamp() * 1000)
+                    }
+                    try:
+                        with open(r'e:\01_Work_Study\Contrail\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                            f.write(json.dumps(log_data, ensure_ascii=False) + '\n')
+                    except Exception:
+                        pass
+                    # #endregion agent log
+                    
+                    # ========== 4. 生成 Word 文档 ==========
                     doc = DocxTemplate(template_path)
                     doc.render(context)
-                    buffer = io.BytesIO()
-                    doc.save(buffer)
-                    buffer.seek(0)
-
-                    # 为每个学生生成一个 docx 文件名
+                    word_buffer = io.BytesIO()
+                    doc.save(word_buffer)
+                    word_buffer.seek(0)
+                    
+                    # ========== 5. 构建 ZIP 文件结构 ==========
+                    # 文件夹名：{学院}_{班级}_{姓名}_{学号}
                     safe_name = (user.name or '未命名').replace('/', '_').replace('\\', '_')
-                    stu_id_or_id = user.student_id or user.id_card_no
-                    docx_filename = f'{safe_name}_{stu_id_or_id}.docx'
-
+                    safe_college = (dept.college or '未知学院').replace('/', '_').replace('\\', '_')
+                    safe_class = (dept.class_name or f'班级{dept.id}').replace('/', '_').replace('\\', '_')
+                    stu_id_or_id = user.student_id or user.id_card_no or ''
+                    folder_name = f'{safe_college}_{safe_class}_{safe_name}_{stu_id_or_id}'
+                    
+                    # Excel 文件名：{姓名}_积分明细.xlsx
+                    excel_filename = f'{safe_name}_积分明细.xlsx'
+                    excel_path_in_zip = f'{folder_name}/{excel_filename}'
+                    
+                    # Word 文件名：{姓名}_送飞鉴定表.docx
+                    word_filename = f'{safe_name}_送飞鉴定表.docx'
+                    word_path_in_zip = f'{folder_name}/{word_filename}'
+                    
                     # 写入 ZIP
-                    zipf.writestr(docx_filename, buffer.getvalue())
-
+                    zipf.writestr(excel_path_in_zip, excel_buffer.getvalue())
+                    zipf.writestr(word_path_in_zip, word_buffer.getvalue())
+                    
                     # 更新进度
                     with EXPORT_TASKS_LOCK:
                         task = EXPORT_TASKS.get(task_id)
@@ -428,7 +800,7 @@ def list_students():
 def get_student_detail(student_id):
     """
     获取学生详情（管理员权限）
-    返回: { "student": {...} }
+    返回: { "student": {...}, "comments": [...], "certificates": [...] }
     """
     admin_id = get_jwt_identity()
     
@@ -450,8 +822,25 @@ def get_student_detail(student_id):
         'admission': student.admission_status,
     }
     
+    # 获取评语列表（按创建时间倒序）
+    comments = student.comments.order_by(Comment.create_time.desc()).all()
+    comments_list = [comment.to_dict() for comment in comments]
+    
+    # 获取证书列表（按上传时间倒序）
+    certificates = student.certificates.order_by(Certificate.upload_time.desc()).all()
+    certificates_list = []
+    for cert in certificates:
+        cert_dict = cert.to_dict()
+        # 添加前端需要的字段
+        cert_dict['certName'] = cert.name
+        # 生成 Presigned URL
+        cert_dict['imgUrl'] = presign_get_object_url(cert.image_url)
+        certificates_list.append(cert_dict)
+    
     return jsonify({
-        'student': student_dict
+        'student': student_dict,
+        'comments': comments_list,
+        'certificates': certificates_list
     }), 200
 
 
@@ -1267,6 +1656,14 @@ def update_student_archive(student_id):
                 phone = (base_info['phone'] or '').strip()
                 # 如需更严格的校验可在此补充
                 student.phone = phone or None
+
+            if 'ethnicity' in base_info:
+                ethnicity = (base_info['ethnicity'] or '').strip()
+                student.ethnicity = ethnicity or None
+
+            if 'political_affiliation' in base_info:
+                political_affiliation = (base_info['political_affiliation'] or '').strip()
+                student.political_affiliation = political_affiliation or None
         
         # 2. 更新四阶段状态（直接更新到 User 表的字段）
         process_status = data.get('process_status', {})

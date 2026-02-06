@@ -36,3 +36,4 @@ def downgrade():
     with op.batch_alter_table('certificates', schema=None) as batch_op:
         batch_op.drop_column('extra_data')
 
+

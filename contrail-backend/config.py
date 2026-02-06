@@ -46,6 +46,13 @@ class Config:
     
     # 基础分默认值
     DEFAULT_BASE_SCORE = 80
+    
+    # RSA 加密配置
+    # 注意：RSA私钥应通过环境变量 RSA_PRIVATE_KEY 提供（PEM格式）
+    # 生产环境必须设置此环境变量，不允许自动生成密钥
+    # 私钥格式示例（多行，需要将换行符转义为 \n）：
+    # -----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----
+    RSA_PRIVATE_KEY = os.environ.get('RSA_PRIVATE_KEY')  # 从环境变量读取
 
 
 class DevelopmentConfig(Config):

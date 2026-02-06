@@ -2,7 +2,8 @@
   "name": "contrail-student-mp",
   "private": true,
   "version": "0.0.0",
-  "description": "Contrail student mini program"
+  "description": "Contrail student mini program",
+  "dependencies": {
+    "@vant/weapp": "^1.11.7"
+  }
 }
-
-

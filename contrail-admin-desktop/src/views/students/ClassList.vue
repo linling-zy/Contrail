@@ -147,7 +147,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getStudents, importStudents, startExportTask, getExportTaskStatus, downloadExportFile } from '@/api/student'
+import { getStudents, getStudentDetail, importStudents, startExportTask, getExportTaskStatus, downloadExportFile } from '@/api/student'
 import { getDepartments } from '@/api/system'
 import { ElMessage } from 'element-plus'
 import { Search, ArrowLeft, Upload, Download, User, UploadFilled } from '@element-plus/icons-vue'
@@ -167,6 +167,8 @@ const queryParams = reactive({
 })
 
 const currentId = ref(null)
+// 已加载详情的学生ID列表，避免重复请求
+const loadedDetailIds = ref([])
 
 // Computed
 const filteredList = computed(() => {
@@ -181,6 +183,70 @@ const filteredList = computed(() => {
 const currentStudent = computed(() => {
    return tableData.value.find(s => s.id === currentId.value) || null
 })
+
+// 加载单个学生的详细信息（评语 + 证书等）
+const loadStudentDetail = async (studentId) => {
+  if (!studentId) return
+  // 已经加载过则直接跳过
+  if (loadedDetailIds.value.includes(studentId)) return
+
+  try {
+    const res = await getStudentDetail(studentId)
+    // 适配后端返回的数据结构
+    const detail = res.student || (res.data && res.data.student) || null
+    if (!detail) return
+
+    const comments = res.comments || (res.data && res.data.comments) || []
+    const certificates = res.certificates || (res.data && res.data.certificates) || []
+
+    // 教师评价：使用最新一条评语的内容
+    let teacherEvaluation = ''
+    if (Array.isArray(comments) && comments.length > 0) {
+      teacherEvaluation = comments[0].content || ''
+    }
+
+    // 证书列表：适配到前端表格需要的字段
+    const mappedCertificates = Array.isArray(certificates)
+      ? certificates.map((c) => {
+          const statusCode = typeof c.status === 'number' ? c.status : null
+          return {
+            name: c.name || c.certName || '',
+            date: (c.upload_time || c.create_time || '').split('T')[0] || '',
+            // 后端状态：0待审/1通过/2驳回，这里简单映射为“已获得/审核中”
+            status: statusCode === 1 ? 'obtained' : 'pending',
+            rawStatus: c.status,
+            imgUrl: c.imgUrl || c.image_url || ''
+          }
+        })
+      : []
+
+    // 找到并更新列表中的对应学生记录
+    const idx = tableData.value.findIndex((s) => s.id === studentId)
+    if (idx !== -1) {
+      tableData.value[idx] = {
+        ...tableData.value[idx],
+        // 覆盖/补充档案字段
+        credits: detail.credits ?? tableData.value[idx].credits ?? null,
+        gpa: detail.gpa ?? tableData.value[idx].gpa ?? null,
+        birthplace: detail.birthplace || tableData.value[idx].birthplace || '',
+        ethnicity: detail.ethnicity || tableData.value[idx].ethnicity || '',
+        politicalAffiliation:
+          detail.political_affiliation ||
+          tableData.value[idx].politicalAffiliation ||
+          '',
+        phone: detail.phone || tableData.value[idx].phone || '',
+        // 教师评价与证书列表
+        teacherEvaluation,
+        certificates: mappedCertificates
+      }
+    }
+
+    loadedDetailIds.value.push(studentId)
+  } catch (error) {
+    // 静默失败，只在控制台打印，避免打扰操作
+    console.error('加载学生详情失败:', error)
+  }
+}
 
 // Export/Import State
 const exportDialogVisible = ref(false)
@@ -254,6 +320,8 @@ const getList = async () => {
           credits: item.credits ?? null,
           gpa: item.gpa ?? null,
           birthplace: item.birthplace || '',
+          ethnicity: item.ethnicity || '',
+          politicalAffiliation: item.political_affiliation || '',
           phone: item.phone || ''
         }
         
@@ -348,6 +416,10 @@ const setItemRef = (el, id) => {
 
 watch(currentId, async (newId) => {
    if (!newId) return
+
+   // 当切换选中学生时，按需加载其详细档案（评语 + 证书）
+   loadStudentDetail(newId)
+
    await nextTick()
    const el = itemRefs.value[newId]
    if (el && scrollbarRef.value) {

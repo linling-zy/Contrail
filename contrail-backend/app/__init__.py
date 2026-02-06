@@ -168,11 +168,14 @@ def auto_setup_database(app):
             # 如果需要升级，运行迁移到最新版本
             if needs_upgrade:
                 try:
-                    # 尝试升级到head
+                    # 总是尝试升级到head（Alembic会自动处理多个heads的情况）
+                    logger.info("[数据库初始化] 开始执行数据库迁移...")
                     command.upgrade(alembic_cfg, 'head')
+                    logger.info("[数据库初始化] 数据库迁移完成！")
                 except Exception as upgrade_error:
+                    error_str = str(upgrade_error).lower()
                     # 如果升级失败且是因为多个heads，尝试升级到所有heads
-                    if 'multiple heads' in str(upgrade_error).lower():
+                    if 'multiple heads' in error_str:
                         logger.warning(f"[数据库初始化] 检测到多个迁移分支，尝试升级所有分支...")
                         from alembic.script import ScriptDirectory
                         script = ScriptDirectory.from_config(alembic_cfg)
@@ -184,10 +187,12 @@ def auto_setup_database(app):
                                 logger.info(f"[数据库初始化] 成功升级到分支: {head}")
                             except Exception as e:
                                 logger.warning(f"[数据库初始化] 升级分支 {head} 时出错: {str(e)}")
+                        logger.info("[数据库初始化] 数据库迁移完成！")
                     else:
+                        # 其他错误，记录详细信息并抛出
+                        logger.error(f"[数据库初始化] 数据库迁移失败: {str(upgrade_error)}")
+                        logger.warning("[数据库初始化] 请手动运行: flask db upgrade")
                         raise
-                
-                logger.info("[数据库初始化] 数据库迁移完成！")
                 
                 # 首次运行时，自动初始化证书类型数据
                 if is_first_run:
@@ -200,7 +205,7 @@ def auto_setup_database(app):
                             {'name': '英语六级', 'description': '大学英语六级考试证书，单次上传，需要存储分数'},
                             {'name': '雅思IELTS', 'description': '国际英语语言测试系统证书，单次上传，需要存储听力、阅读、写作、口语、总分'},
                             {'name': '任职情况', 'description': '学生任职情况证明，可多次上传，需要存储任职时间、职务、集体获奖情况'},
-                            {'name': '获奖情况', 'description': '学生获奖情况证明，可多次上传，需要存储奖励时间、主办单位、奖励级别、获奖等次'}
+                            {'name': '获奖情况', 'description': '学生获奖情况证明，可多次上传，需要存储奖励时间、奖励名称、主办单位、奖励级别、获奖等次'}
                         ]
                         
                         created_count = 0

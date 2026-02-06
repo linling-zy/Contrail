@@ -29,3 +29,5 @@ def downgrade():
         batch_op.drop_column('base_score')
 
 
+
+

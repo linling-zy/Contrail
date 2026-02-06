@@ -6,7 +6,8 @@
     "pages/certificate_edit/certificate_edit",
     "pages/my/my",
     "pages/comment/comment",
-    "pages/score_detail/score_detail"
+    "pages/score_detail/score_detail",
+    "pages/my/profile_detail/profile_detail"
   ],
   "window": {
     "navigationBarTextStyle": "black",
