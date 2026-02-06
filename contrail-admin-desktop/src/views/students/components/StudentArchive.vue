@@ -46,6 +46,12 @@
                <el-form-item label="籍贯">
                   <el-input v-model="profileForm.birthplace" style="width: 120px;" />
                </el-form-item>
+               <el-form-item label="民族">
+                  <el-input v-model="profileForm.ethnicity" style="width: 120px;" />
+               </el-form-item>
+               <el-form-item label="政治面貌">
+                  <el-input v-model="profileForm.politicalAffiliation" style="width: 140px;" />
+               </el-form-item>
                <el-form-item label="电话">
                   <el-input v-model="profileForm.phone" style="width: 140px;" />
                </el-form-item>
@@ -215,6 +221,8 @@ const profileForm = reactive({
     credits: null,
     gpa: null,
     birthplace: '',
+    ethnicity: '',
+    politicalAffiliation: '',
     phone: ''
 })
 
@@ -281,6 +289,8 @@ watch(() => props.studentData, (newVal) => {
      profileForm.credits = newVal.credits || null
      profileForm.gpa = newVal.gpa || null
      profileForm.birthplace = newVal.birthplace || ''
+     profileForm.ethnicity = newVal.ethnicity || ''
+     profileForm.politicalAffiliation = newVal.politicalAffiliation || newVal.political_affiliation || ''
      profileForm.phone = newVal.phone || ''
   }
 }, { immediate: true, deep: true })
@@ -298,6 +308,8 @@ const handleSave = async () => {
         credits: profileForm.credits !== null && profileForm.credits !== '' ? profileForm.credits : undefined,
         gpa: profileForm.gpa !== null && profileForm.gpa !== '' ? profileForm.gpa : undefined,
         birthplace: profileForm.birthplace || undefined,
+        ethnicity: profileForm.ethnicity || undefined,
+        political_affiliation: profileForm.politicalAffiliation || undefined,
         phone: profileForm.phone || undefined
         // department_id 和 base_score 如果需要更新，可以从 studentData 中获取或添加输入框
       },

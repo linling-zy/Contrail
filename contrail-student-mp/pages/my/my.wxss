@@ -107,3 +107,31 @@ page {
   font-size: 28rpx;
   color: #999999;
 }
+
+/* Action Card (New) */
+.action-card {
+  background-color: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.03);
+  margin-top: 32rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-card:active {
+  background-color: #f9f9f9;
+}
+
+.action-text {
+  font-size: 30rpx;
+  color: #333333;
+  font-weight: 500;
+}
+
+.action-arrow {
+  color: #969799;
+  font-size: 32rpx;
+  font-family: sans-serif;
+}

@@ -71,12 +71,19 @@
 
       <view class="divider"></view>
 
-      <!-- Phone -->
       <view class="info-cell">
         <text class="label">联系电话</text>
         <text class="value">{{userInfo.phone || '未设置'}}</text>
       </view>
 
     </view>
+    
+    <!-- View Full Profile Entry -->
+    <navigator url="/pages/my/profile_detail/profile_detail" hover-class="none">
+      <view class="action-card">
+        <text class="action-text">查看完整个人档案</text>
+        <text class="action-arrow">></text>
+      </view>
+    </navigator>
   </block>
 </view>

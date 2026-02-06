@@ -50,11 +50,11 @@
             <div class="stat-row">
               <div class="stat-item">
                 <span class="stat-label">班级成员</span>
-                <span class="stat-val">--</span>
+                <span class="stat-val">{{ dept.studentCount }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">证书配置</span>
-                <span class="stat-val">{{ dept.certificate_types_count || '配置' }}</span>
+                <span class="stat-val">{{ dept.certCount }}</span>
               </div>
             </div>
           </div>
@@ -229,7 +229,9 @@ const loadData = async () => {
         college: dept.college,
         grade: dept.grade,
         major: dept.major,
-        className: dept.class_name
+        className: dept.class_name,
+        studentCount: dept.student_count || 0,
+        certCount: dept.certificate_types_count !== undefined ? dept.certificate_types_count : (dept.certificate_types ? dept.certificate_types.length : 0)
       }))
     } else if (res.data && Array.isArray(res.data)) {
       // Mock 数据格式（兼容）

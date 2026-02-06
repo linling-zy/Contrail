@@ -71,8 +71,9 @@ def login():
 @jwt_required()
 def get_profile():
     """
-    获取当前用户信息
+    获取当前用户基本信息
     需要携带 JWT Token
+    返回: { "user": {...} }
     """
     user_id = get_jwt_identity()
     user = User.query.get(user_id)

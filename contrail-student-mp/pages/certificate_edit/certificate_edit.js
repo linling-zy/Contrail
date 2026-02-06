@@ -38,6 +38,7 @@ Page({
             job_title: '',
             job_award: '', // 集体获奖情况
             award_date: '',
+            award_name: '', // 奖励名称
             award_org: '', // 主办单位
             award_level: '', // 奖励级别
             award_rank: '', // 获奖等次
@@ -99,6 +100,7 @@ Page({
             job_title: '',
             job_award: '',
             award_date: '',
+            award_name: '',
             award_org: '',
             award_level: '',
             award_rank: '',
@@ -244,6 +246,7 @@ Page({
             job_title: '',
             job_award: '',
             award_date: '',
+            award_name: '',
             award_org: '',
             award_level: '',
             award_rank: '',
@@ -359,11 +362,13 @@ Page({
             }
         } else if (formType === 'AWARD') {
             if (!formData.award_date) return this.warn('请选择获奖时间')
+            if (!formData.award_name) return this.warn('请输入奖励名称')
             if (!formData.award_org) return this.warn('请输入主办单位')
             if (!formData.award_level) return this.warn('请选择奖励级别')
             if (!formData.award_rank) return this.warn('请输入获奖等次')
             extraData = {
                 date: formData.award_date,
+                name: formData.award_name,
                 organizer: formData.award_org,
                 level: formData.award_level,
                 rank: formData.award_rank

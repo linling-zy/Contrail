@@ -91,6 +91,8 @@ class User(db.Model):
     gpa = db.Column(db.Float, nullable=True, comment='绩点')
     birthplace = db.Column(db.String(100), nullable=True, comment='籍贯')
     phone = db.Column(db.String(20), nullable=True, comment='联系电话')
+    ethnicity = db.Column(db.String(50), nullable=True, comment='民族')
+    political_affiliation = db.Column(db.String(50), nullable=True, comment='政治面貌（如：中共党员、共青团员、群众等）')
     
     # 关系：一个用户有多条积分流水记录
     score_logs = db.relationship('ScoreLog', backref='user', lazy='dynamic', cascade='all, delete-orphan')
@@ -143,6 +145,8 @@ class User(db.Model):
             'gpa': self.gpa,
             'birthplace': self.birthplace,
             'phone': self.phone,
+            'ethnicity': self.ethnicity,
+            'political_affiliation': self.political_affiliation,
         }
         if include_score:
             data['total_score'] = self.total_score

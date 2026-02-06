@@ -1,0 +1,12 @@
+{
+    "navigationBarTitleText": "完整个人档案",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "navigationStyle": "default",
+    "renderer": "webview",
+    "usingComponents": {
+        "van-cell": "@vant/weapp/cell/index",
+        "van-cell-group": "@vant/weapp/cell-group/index",
+        "van-loading": "@vant/weapp/loading/index"
+    }
+}

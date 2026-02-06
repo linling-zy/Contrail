@@ -212,15 +212,20 @@ const displayItems = computed(() => {
     }
   }
   
-  // Type D: Awards - Check 'rank' or 'level'
-  else if (has('rank') || has('level') || has('organizer')) {
+  // Type D: Awards - Check 'rank' or 'level' or 'organizer' or 'name'
+  else if (has('rank') || has('level') || has('organizer') || has('name')) {
+    // 奖励名称（优先显示，高亮）
+    if (has('name')) {
+      list.push({ label: '奖励名称', value: extra.name, highlight: true, icon: 'Trophy', fullWidth: true });
+    }
+    
     // Combine Level and Rank into Tags
     const tags = [];
     if (has('level')) tags.push({ text: extra.level, type: 'danger' });
     if (has('rank')) tags.push({ text: extra.rank, type: 'warning' });
     
     if (tags.length > 0) {
-      list.push({ label: '获奖等级', tags: tags, icon: 'Trophy', fullWidth: true });
+      list.push({ label: '获奖等级', tags: tags, icon: 'Medal', fullWidth: true });
     }
     
     if (has('organizer')) {

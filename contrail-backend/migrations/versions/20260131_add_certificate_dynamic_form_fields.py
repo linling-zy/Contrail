@@ -24,17 +24,15 @@ def upgrade():
     with op.batch_alter_table('certificate_types', schema=None) as batch_op:
         batch_op.add_column(sa.Column('form_schema', sa.JSON(), nullable=True, comment='表单定义（JSON格式），用于动态渲染输入框'))
     
-    # 为 certificates 表添加 extra_data 字段
-    with op.batch_alter_table('certificates', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('extra_data', sa.JSON(), nullable=True, comment='额外数据（JSON格式），存储动态表单填写的具体数据'))
+    # 注意：extra_data 字段已在 20260131_add_certificate_extra_data 迁移中添加
+    # 这里不再重复添加，避免与合并分支冲突
 
 
 def downgrade():
-    # 移除 extra_data 字段
-    with op.batch_alter_table('certificates', schema=None) as batch_op:
-        batch_op.drop_column('extra_data')
-    
     # 移除 form_schema 字段
     with op.batch_alter_table('certificate_types', schema=None) as batch_op:
         batch_op.drop_column('form_schema')
+    
+    # 注意：extra_data 字段的删除由 20260131_add_certificate_extra_data 迁移的 downgrade 处理
+
 

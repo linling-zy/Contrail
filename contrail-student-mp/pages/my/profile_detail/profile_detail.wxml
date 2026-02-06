@@ -1,0 +1,201 @@
+
+<view class="dashboard-container">
+  
+  <!-- Loading State -->
+  <view class="loading-container" wx:if="{{loading}}">
+    <van-loading type="spinner" vertical color="#1989fa">加载数据中...</van-loading>
+  </view>
+
+  <block wx:else>
+    <!-- Header: Name & Identity -->
+    <view class="header-section">
+      <view class="user-name">{{userInfo.name}}</view>
+      <view class="user-meta">
+        <text class="meta-tag">{{userInfo.college}}</text>
+        <text class="meta-divider">|</text>
+        <text>{{userInfo.major}}</text>
+      </view>
+    </view>
+
+    <!-- Hero Stats: Key Metrics -->
+    <view class="hero-stats-card">
+      <view class="stat-item">
+        <view class="stat-value">{{userInfo.gpa}}</view>
+        <view class="stat-label">平均绩点</view>
+      </view>
+      <view class="stat-divider"></view>
+      <view class="stat-item">
+        <view class="stat-value">{{userInfo.credits}}</view>
+        <view class="stat-label">已修学分</view>
+      </view>
+       <view class="stat-divider"></view>
+      <view class="stat-item">
+        <view class="stat-value">{{userInfo.comprehensiveScore}}</view>
+        <view class="stat-label">量化积分</view>
+      </view>
+    </view>
+
+    <!-- Card 1: Basic Information -->
+    <view class="content-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        基础档案
+      </view>
+      <view class="info-grid">
+         <view class="info-item">
+            <text class="label">性别</text>
+            <text class="value">{{userInfo.gender}}</text>
+         </view>
+         <view class="info-item">
+            <text class="label">民族</text>
+            <text class="value">{{userInfo.ethnicity}}</text>
+         </view>
+         <view class="info-item">
+            <text class="label">出生日期</text>
+            <text class="value">{{userInfo.birthDate}}</text>
+         </view>
+         <view class="info-item">
+            <text class="label">政治面貌</text>
+            <text class="value">{{userInfo.politicalAffiliation}}</text>
+         </view>
+         <view class="info-item full-row">
+            <text class="label">学号</text>
+            <text class="value">{{userInfo.studentId}}</text>
+         </view>
+          <view class="info-item full-row">
+            <text class="label">身份证号</text>
+            <text class="value">{{userInfo.idCard}}</text>
+         </view>
+          <view class="info-item full-row">
+            <text class="label">籍贯</text>
+            <text class="value">{{userInfo.birthplace}}</text>
+         </view>
+         <view class="info-item full-row">
+            <text class="label">行政班级</text>
+            <text class="value">{{userInfo.class}}</text>
+         </view>
+         <view class="info-item full-row">
+            <text class="label">联系电话</text>
+            <text class="value">{{userInfo.phone}}</text>
+         </view>
+      </view>
+    </view>
+
+    <!-- Card 2: English Proficiency -->
+    <view class="content-card">
+       <view class="card-title">
+        <view class="title-bar"></view>
+        英语能力
+      </view>
+      
+      <!-- Simple Scores (CET) -->
+      <view class="cet-box" wx:if="{{viewData.english.simple.length > 0}}">
+         <view class="cet-tag" wx:for="{{viewData.english.simple}}" wx:key="index">{{item}}</view>
+      </view>
+
+      <!-- Complex Scores (IELTS) -->
+      <view class="ielts-list" wx:if="{{viewData.english.complex.length > 0}}">
+        <block wx:for="{{viewData.english.complex}}" wx:key="index">
+           <view class="ielts-item">
+              <view class="ielts-header">
+                  <text class="ielts-title">雅思 IELTS</text>
+                  <!-- Assuming title contains date, extract if needed or show title -->
+              </view>
+              <view class="score-grid">
+                  <view class="score-col highlight">
+                      <text class="s-val">{{item.values[0]}}</text>
+                      <text class="s-lbl">总分</text>
+                  </view>
+                   <view class="score-col">
+                      <text class="s-val">{{item.values[1]}}</text>
+                      <text class="s-lbl">听力</text>
+                  </view>
+                   <view class="score-col">
+                      <text class="s-val">{{item.values[2]}}</text>
+                      <text class="s-lbl">阅读</text>
+                  </view>
+                   <view class="score-col">
+                      <text class="s-val">{{item.values[3]}}</text>
+                      <text class="s-lbl">写作</text>
+                  </view>
+                   <view class="score-col">
+                      <text class="s-val">{{item.values[4]}}</text>
+                      <text class="s-lbl">口语</text>
+                  </view>
+              </view>
+           </view>
+        </block>
+      </view>
+
+      <view wx:if="{{viewData.english.simple.length === 0 && viewData.english.complex.length === 0}}" class="empty-placeholder">
+        暂无英语成绩记录
+      </view>
+    </view>
+
+    <!-- Card 3: Positions (Timeline Style) -->
+    <view class="content-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        任职经历
+      </view>
+      
+      <view class="timeline-container" wx:if="{{viewData.positions.complex.length > 0}}">
+         <block wx:for="{{viewData.positions.complex}}" wx:key="index">
+            <view class="timeline-item">
+                <view class="timeline-left">
+                    <view class="timeline-line"></view>
+                    <view class="timeline-dot"></view>
+                </view>
+                <view class="timeline-content">
+                    <view class="t-role">{{item.role}}</view>
+                    <view class="t-info-row" wx:if="{{item.organization}}">
+                        <text class="t-label">组织：</text>
+                        <text class="t-value">{{item.organization}}</text>
+                    </view>
+                    <view class="t-info-row" wx:if="{{item.timeStr}}">
+                        <text class="t-label">时间：</text>
+                        <text class="t-value">{{item.timeStr}}</text>
+                    </view>
+                    <view class="t-info-row" wx:if="{{item.level}}">
+                        <text class="t-label">级别：</text>
+                        <text class="t-value">{{item.level}}</text>
+                    </view>
+                    <view class="t-badge" wx:if="{{item.collective_awards}}">
+                        集体荣誉: {{item.collective_awards}}
+                    </view>
+                </view>
+            </view>
+         </block>
+      </view>
+       <view wx:else class="empty-placeholder">暂无任职记录</view>
+    </view>
+
+    <!-- Card 4: Awards (Card List Style) -->
+    <view class="content-card">
+      <view class="card-title">
+        <view class="title-bar"></view>
+        获奖荣誉
+      </view>
+
+      <block wx:if="{{viewData.awards.complex.length > 0}}">
+         <view class="award-list">
+            <view class="award-card" wx:for="{{viewData.awards.complex}}" wx:key="index">
+                <view class="ac-top">
+                    <text class="ac-name">{{item.values[0]}}</text>
+                    <text class="ac-level">{{item.values[2]}}</text>
+                </view>
+                <view class="ac-mid">
+                   <text class="ac-rank" wx:if="{{item.values[1]}}">{{item.values[1]}}</text>
+                </view>
+                <view class="ac-bot">
+                    <text class="ac-organizer">主办: {{item.values[3] || '-'}}</text>
+                    <text class="ac-date">{{item.title}}</text>
+                </view>
+            </view>
+         </view>
+      </block>
+      <view wx:else class="empty-placeholder">暂无获奖记录</view>
+    </view>
+
+  </block>
+</view>
